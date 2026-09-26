@@ -84,7 +84,7 @@ async def run_mock_stream(
                     feature_id=feature.id,
                     value=round(value, 3),
                     coords=_coords_for(feature.id),
-                ).model_dump()
+                ).model_dump(exclude_none=True)
             )
 
             if value > 0.75 and feature.cluster in ("hedging", "refusal", "unsupported"):

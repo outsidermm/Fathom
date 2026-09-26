@@ -173,6 +173,9 @@ function handleMessage(message: ServerMessage) {
 }
 function connect() {
   if (typeof window === "undefined" || subscribers === 0) return;
+  if (retryTimer !== null) clearTimeout(retryTimer);
+  retryTimer = null;
+  if (socket) return;
   const epoch = ++socketEpoch;
   const ws = new WebSocket(WS_URL);
   socket = ws;
@@ -203,6 +206,7 @@ function connect() {
   ws.onclose = () => {
     if (epoch !== socketEpoch) return;
     socket = null;
+    pendingStart = null;
     const active = useStreamStore.getState().activeRunId;
     if (active) {
       const run = useStreamStore
@@ -246,8 +250,12 @@ export function mountStreamConnection() {
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = null;
     socketEpoch++;
+    pendingStart = null;
     socket?.close();
     socket = null;
+    const active = useStreamStore.getState().activeRunId;
+    const run = useStreamStore.getState().runs.find((item) => item.id === active);
+    if (run?.status === "streaming") patchRun(run.id, { status: "stopped" });
     useStreamStore.setState({ connection: "closed" });
   };
 }
@@ -311,6 +319,7 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
     if (run) get().start(run.prompt, run.model);
   },
   stop() {
+    pendingStart = null;
     send({ type: "stop" });
     const id = get().activeRunId;
     if (id) patchRun(id, { status: "stopped" });

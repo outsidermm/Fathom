@@ -20,7 +20,8 @@ LOOKAHEAD = 140  # Paced display stays this far behind Qwen, so leads are known 
 @dataclass(frozen=True)
 class Checkpoint:
     # Character offset where the section starts. The reading is shown before
-    # any text from here on; 0 with sample_end 0 means "before the answer".
+    # any text from here on when ready within the hold; late readings keep
+    # this offset. 0 with sample_end 0 means "before the answer".
     position: int
     # The replay covers answer[:sample_end]; 0 reads the end of the prompt.
     sample_end: int
@@ -42,9 +43,9 @@ def _lead_end(answer: str, start: int) -> int | None:
     if match and match.start() > start:
         return match.start()
     window = answer[start : start + _MAX_LEAD]
-    words = window.split()
+    words = list(re.finditer(r"\S+", window))
     if len(words) > 8:
-        return start + window.index(words[8], len(" ".join(words[:8])))
+        return start + words[8].start()
     return None
 
 

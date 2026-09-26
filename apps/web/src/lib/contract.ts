@@ -3,10 +3,8 @@
  * Keep all three in sync when the contract changes.
  */
 
-// "gemma-2b" stays a valid value even though the backend rejects it ("Only
-// qwen2.5-7b is connected" in apps/api/app/main.py): top-bar.tsx's model
-// select shows it as a disabled "Gemma 2B (unavailable)" option, so state
-// needs to be able to hold it even though the UI never lets it be sent.
+// Reserved value shared with the disabled model-select option. The backend
+// explicitly rejects it; only qwen2.5-7b can start a generation.
 export type Model = "gemma-2b" | "qwen2.5-7b";
 export type Signature = "hedging" | "refusal" | "unsupported";
 export type StreamState = "idle" | "streaming" | "inspecting" | "done" | "error";
@@ -50,13 +48,13 @@ export type ServerMessage =
       layer: 20;
       sample: "replayed_last_content_token" | "prompt_end"; // prompt_end: read before any answer text
       checkpoint_id: number;
-      position: number; // character offset where the section starts; the reading precedes that text
+      position: number; // Unicode code-point section offset; a timed-out reading can arrive later
       label: string;
       genre: string; // first sentence: mostly the AV's generic prior
       detail: string; // the rest: carries most of the signal
       focus?: string | null; // short "-ing" phrase compressing the detail, from the AV note alone
-      replay_ms?: number;
-      av_ms?: number;
+      replay_ms?: number | null;
+      av_ms?: number | null;
     }
   | {
       type: "av_error";

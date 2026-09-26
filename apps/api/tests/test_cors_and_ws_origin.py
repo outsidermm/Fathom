@@ -13,15 +13,16 @@
 
 from __future__ import annotations
 
+import importlib.util
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 
-# The app is built with the default CORS_ORIGINS ("http://localhost:3000")
-# since no override is set for the test process/environment.
-ALLOWED_ORIGIN = "http://localhost:3000"
+ALLOWED_ORIGIN = "https://allowed.example"
 FOREIGN_ORIGIN = "http://evil.example"
 
 
@@ -44,8 +45,22 @@ class WebSocketOriginTests(unittest.TestCase):
 
 
 class HttpCorsRestrictionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        # Load a separate app with an explicit config, without reloading the
+        # shared module or inheriting a developer's shell / apps/api/.env.
+        spec = importlib.util.spec_from_file_location(
+            "app._cors_test_main", Path(__file__).parents[1] / "app/main.py"
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        with patch.dict("os.environ", {"CORS_ORIGINS": ALLOWED_ORIGIN}), \
+                patch("dotenv.load_dotenv"):
+            spec.loader.exec_module(module)
+        cls.app = module.app
+
     def test_preflight_from_allowed_origin_is_granted(self) -> None:
-        with TestClient(app) as client:
+        with TestClient(self.app) as client:
             response = client.options(
                 "/api/health",
                 headers={"origin": ALLOWED_ORIGIN, "access-control-request-method": "GET"},
@@ -57,7 +72,7 @@ class HttpCorsRestrictionTests(unittest.TestCase):
         """CORS_ORIGINS actually restricts plain HTTP endpoints: a disallowed
         Origin fails the CORSMiddleware preflight check (400, no
         Access-Control-Allow-Origin grant), unlike the websocket route above."""
-        with TestClient(app) as client:
+        with TestClient(self.app) as client:
             response = client.options(
                 "/api/health",
                 headers={"origin": FOREIGN_ORIGIN, "access-control-request-method": "GET"},
@@ -70,7 +85,7 @@ class HttpCorsRestrictionTests(unittest.TestCase):
         enforced by the browser, not the server), but omits the
         Access-Control-Allow-Origin header for a disallowed origin, so a
         browser would block the frontend JS from reading the response."""
-        with TestClient(app) as client:
+        with TestClient(self.app) as client:
             allowed = client.get("/api/health", headers={"origin": ALLOWED_ORIGIN})
             foreign = client.get("/api/health", headers={"origin": FOREIGN_ORIGIN})
 

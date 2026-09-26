@@ -1,8 +1,10 @@
 #!/bin/bash
 # Restart only the AV sidecar on :30003 (Qwen and AV keep running).
+set -euo pipefail
 STATE=/workspace/hackgt
 # shellcheck disable=SC1091
 source "$STATE/secrets.env"
+: "${AV_API_KEY:?AV_API_KEY must be nonempty before exposing the sidecar}"
 for pid in $(pgrep -f '^/root/av-client-venv/bin/python /root/av-client-venv/bin/uvicorn av_sidecar:app'); do kill "$pid"; done
 sleep 2
 nohup env PYTHONPATH=/workspace/nla-inference QWEN_REPLAY_DEVICE=cuda:0 \

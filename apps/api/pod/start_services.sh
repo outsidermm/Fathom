@@ -19,6 +19,8 @@ if [ ! -f "$STATE/secrets.env" ]; then
 fi
 # shellcheck disable=SC1091
 source "$STATE/secrets.env"
+: "${QWEN_API_KEY:?QWEN_API_KEY must be nonempty before exposing Qwen}"
+: "${AV_API_KEY:?AV_API_KEY must be nonempty before exposing the sidecar}"
 
 listening() { ss -ltn "sport = :$1" | grep -q LISTEN; }
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -73,12 +74,21 @@ async def qwen_deltas(
 
 def _content_delta(payload: str) -> str:
     event = json.loads(payload)
+    if not isinstance(event, dict):
+        raise ValueError("Qwen returned an invalid event")
     if "error" in event:
         raise ValueError("Qwen returned a streaming error")
-    choices = event.get("choices") or []
+    choices = event.get("choices", [])
+    if not isinstance(choices, list):
+        raise ValueError("Qwen returned invalid choices")
     if not choices:
         return ""
-    content = choices[0].get("delta", {}).get("content")
+    if not isinstance(choices[0], dict):
+        raise ValueError("Qwen returned an invalid choice")
+    delta = choices[0].get("delta", {})
+    if not isinstance(delta, dict):
+        raise ValueError("Qwen returned an invalid delta")
+    content = delta.get("content")
     return content if isinstance(content, str) else ""
 
 
@@ -154,7 +164,8 @@ _DRIP_SECONDS = 0.02
 
 def _env_float(name: str, default: float) -> float:
     try:
-        return float(os.environ.get(name, default))
+        value = float(os.environ.get(name, default))
+        return value if math.isfinite(value) and value >= 0 else default
     except ValueError:
         return default
 
@@ -317,11 +328,11 @@ async def run_qwen_stream(
         await send(
             StatusEvent(
                 state="error", message=f"Qwen server returned HTTP {exc.response.status_code}"
-            ).model_dump()
+            ).model_dump(exclude_none=True)
         )
     except (httpx.RequestError, ValueError) as exc:
         await send(
-            StatusEvent(state="error", message=f"Qwen stream unavailable: {type(exc).__name__}").model_dump()
+            StatusEvent(state="error", message=f"Qwen stream unavailable: {type(exc).__name__}").model_dump(exclude_none=True)
         )
     finally:
         pending: list[asyncio.Task[Any]] = [producer, *(task for _, task in checkpoints)]

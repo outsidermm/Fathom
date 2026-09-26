@@ -31,12 +31,23 @@ tool lets you see down into the deep and steer what's there.
   harbor, and coral-ink text values were then confirmed from the site's
   computed styles. Gradients and textures can make surface pixels differ.
 - **Fonts were confirmed from computed styles on hack.gt on Sep 25, 2026.**
-  The site uses Darumadrop One for display and Sen for UI and body copy.
+  The site uses Darumadrop One for display and Sen for body copy; the
+  September 26 check below distinguishes the live nav from our UI font choice.
   Both are available through `next/font/google`.
 - **Motion** on hack.gt wasn't observable from static screenshots. §7 is
   our own motion vocabulary built to fit the illustrations. Glance at the
   live site and match anything obvious (for example, if the waves drift,
   match their speed).
+
+Live computed-style verification on **2026-09-26** found **both** reported
+blues on [hack.gt](https://hack.gt): the “Friday, September 25” heading uses
+`rgb(8, 113, 163)` (`#0871a3`), while “Oracle of the Deep” uses
+`rgb(14, 99, 152)` (`#0e6398`). This app retains its existing `--harbor`
+choice, `#0871a3`; changing that choice would be a design decision. Hari’s
+styleguide label and CSS fallbacks should match the chosen app token.
+The same browser check confirmed Darumadrop One for those headings **and
+the About nav link**, and Sen for About body text. Sen for this app’s UI
+is our readability choice, not an exact reproduction of the live nav.
 
 ## 3. Palette tokens
 
@@ -57,7 +68,7 @@ tool lets you see down into the deep and steer what's there.
 | `--crate` | `#c5a97c` | crate slats | inactive tab text and outlines on driftwood |
 | `--ink` | `#055958` | "About"/"Tracks" headings, body copy | **primary text color** on sand and water |
 | `--slate` | `#384151` | nav links | nav and secondary UI text |
-| `--harbor` | `#0871a3` | "Friday, September 25", track names | links, secondary headings |
+| `--harbor` | `#0871a3` | "Friday, September 25" date heading | links, secondary headings |
 | `--water` | `#aae2f0` | Tracks section water | shallow-water surfaces |
 | `--water-mid` | `#9fd5e6` | sponsor section sea | gradients |
 | `--water-deep` | `#5896ab` | lower sea band | transition into the Deep |

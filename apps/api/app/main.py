@@ -7,6 +7,7 @@ Contract: ../../docs/api-contract.md
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from contextlib import suppress
 from pathlib import Path
@@ -64,11 +65,15 @@ async def ws_stream(websocket: WebSocket) -> None:
 
     async def cancel_run() -> None:
         nonlocal run_task
-        if run_task and not run_task.done():
-            run_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await run_task
+        task = run_task
         run_task = None
+        if task is not None:
+            if not task.done():
+                task.cancel()
+            # Retrieve completed failures too. A dropped transport can fail
+            # the sender before the receive loop observes the disconnect.
+            with suppress(asyncio.CancelledError, WebSocketDisconnect, OSError):
+                await task
 
     try:
         await send(StatusEvent(state="idle").model_dump(exclude_none=True))
@@ -79,7 +84,7 @@ async def ws_stream(websocket: WebSocket) -> None:
                 raw = await websocket.receive_json()
             except WebSocketDisconnect:
                 raise
-            except Exception:
+            except (json.JSONDecodeError, KeyError, UnicodeDecodeError):
                 await send(
                     StatusEvent(
                         state="error", message="malformed message: expected JSON"
@@ -103,7 +108,7 @@ async def ws_stream(websocket: WebSocket) -> None:
                     await cancel_run()
                     if msg.model != "qwen2.5-7b":
                         await send(
-                            StatusEvent(state="error", message="Only qwen2.5-7b is connected").model_dump()
+                            StatusEvent(state="error", message="Only qwen2.5-7b is connected").model_dump(exclude_none=True)
                         )
                         continue
                     run_task = asyncio.create_task(run_qwen_stream(msg.prompt, send, pace=msg.pace))
@@ -111,19 +116,19 @@ async def ws_stream(websocket: WebSocket) -> None:
                 elif msg_type == "clamp":
                     ClampMessage.model_validate(raw)
                     await send(
-                        StatusEvent(state="error", message="Activation steering is not connected yet").model_dump()
+                        StatusEvent(state="error", message="Activation steering is not connected yet").model_dump(exclude_none=True)
                     )
 
                 elif msg_type == "reset_clamps":
                     ResetClampsMessage.model_validate(raw)
                     await send(
-                        StatusEvent(state="error", message="Activation steering is not connected yet").model_dump()
+                        StatusEvent(state="error", message="Activation steering is not connected yet").model_dump(exclude_none=True)
                     )
 
                 elif msg_type == "stop":
                     StopMessage.model_validate(raw)
                     await cancel_run()
-                    await send(StatusEvent(state="idle").model_dump())
+                    await send(StatusEvent(state="idle").model_dump(exclude_none=True))
 
                 else:
                     await send(
@@ -140,4 +145,6 @@ async def ws_stream(websocket: WebSocket) -> None:
                     StatusEvent(state="error", message=str(exc)).model_dump(exclude_none=True)
                 )
     except WebSocketDisconnect:
+        pass
+    finally:
         await cancel_run()

@@ -19,7 +19,9 @@ export function TokenStream() {
     if (!paused.current)
       scroller.current?.scrollTo({
         top: scroller.current.scrollHeight,
-        behavior: "smooth",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
       });
   }, [run?.tokens.length]);
   const tokens = run?.tokens ?? [];

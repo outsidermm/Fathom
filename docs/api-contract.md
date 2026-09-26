@@ -3,9 +3,11 @@
 This is the shared source of truth so `apps/web` (Samuel, Hari) and `apps/api`
 (Kareem, James) can build in parallel without waiting on each other. The API
 currently streams **live Qwen text** and up to six checkpointed NLA AV
-interpretations during or after the answer. Activation-map events, flags, and steering are planned; `/api/features`
+interpretations while delivering the answer. Activation-map events, flags, and steering are planned; `/api/features`
 still returns placeholder data. The frontend should not present those
-placeholders as model internals.
+placeholders as model internals. **Integration gap:** `apps/web` currently
+handles tokens and planned map/flag events, but drops `av`, `av_error`, and
+`status: inspecting`; a typed event is not yet a visible interpretation.
 
 If you change a shape here, update both `apps/api/app/schemas.py` (Pydantic)
 and `apps/web/src/lib/contract.ts` (TypeScript) in the same commit.
@@ -20,7 +22,8 @@ and `apps/web/src/lib/contract.ts` (TypeScript) in the same commit.
 
 One websocket connection per browser tab. **No state-resuming reconnect for
 the hackathon** — on disconnect, the client opens a fresh connection and
-sends `start` again to begin a new run. The API does not persist runs or
+lets the user press Run or Rerun to send `start` again for a new run.
+Generation is not automatically replayed after a disconnect. The API does not persist runs or
 clamps.
 
 ### Client → server
@@ -47,9 +50,10 @@ clamps.
 // A generated Qwen text delta, in order (may be a partial word)
 { "type": "token", "index": 0, "text": "The", "position": 0 }
 
-// One checkpoint interpretation, sent after the text up to `position` (a
-// character offset in the displayed answer, not a token index) and before any
-// text from `position` on: it describes the state just before that text.
+// One checkpoint interpretation associated with the section at `position`
+// (a Python Unicode-code-point offset, not a token index or JS UTF-16 offset).
+// Paced runs try to send it before that section; a timed-out reading can
+// arrive after its text has started. Unpaced runs do not guarantee precedence.
 // Show `focus`, a 3-7 word "-ing" label ("advising to set a budget") that
 // Qwen writes from the AV's `detail` alone (never from the answer text); keep
 // `detail` one click away. `focus` is null when it could not be made or the
@@ -59,7 +63,7 @@ clamps.
   "focus": "advising to determine a budget",
   "layer": 20, "sample": "replayed_last_content_token",
   "checkpoint_id": 0, "position": 95, "label": "Step 1",
-  "replay_ms": 40, "av_ms": 2100 }
+  "replay_ms": 40, "av_ms": 2100 } // timings may be null or absent
 
 // AV failed; the Qwen answer remains valid and status:done still follows.
 { "type": "av_error", "message": "AV unavailable: ...", "checkpoint_id": 0,
@@ -116,7 +120,10 @@ clamps.
   hedging/refusal/unsupported feature signatures early since the frontend
   needs a way to visually distinguish them. See `docs/design-system.md` §3
   for the `--alert` token and the map's color rules.
-- Readings come before the text they describe. In paced runs the display
+- Paced readings normally precede their section. After a hold times out, a
+  reading may arrive later while the answer is still streaming; `position`
+  remains its original section start. Unpaced readings can also be late.
+  In paced runs the display
   stays 140 characters behind Qwen: the first reading ("Plan", `position` 0,
   `sample: "prompt_end"`) is Qwen's state at the `<|im_start|>` token just
   before the assistant header, before any answer text; each later one is read
@@ -126,7 +133,10 @@ clamps.
   a bare list marker. Up to six readings: the plan, three consecutive
   sections, then sections at least 300 characters apart. Every checkpoint gets
   its own AV request (up to `AV_CONCURRENCY`, default 3, at once); none are
-  replaced or skipped. Holds last up to `AV_HOLD_TIMEOUT` (4 s). A Markdown
+  replaced or skipped after scheduling. Holds last up to `AV_HOLD_TIMEOUT`
+  (4 s). Non-finite, negative, or invalid tuning values fall back to defaults.
+  `AV_CONCURRENCY` is truncated to an integer and is at least 1; it limits
+  each run independently, not aggregate GPU work. A Markdown
   heading directly followed by a numbered step counts as one section.
 - Section phrases carry no foresight beyond the heading words: in
   `apps/api/scripts/predict_eval.py` they matched the following section 82% of

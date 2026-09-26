@@ -14,14 +14,17 @@ const SAMPLES = [
 export function PromptConsole({ model }: { model: Model }) {
   const [prompt, setPrompt] = useState("");
   const connection = useStreamStore((state) => state.connection);
-  const run = useStreamStore((state) =>
-    state.runs.find((item) => item.id === state.activeRunId),
+  const runStatus = useStreamStore((state) =>
+    state.runs.find((item) => item.id === state.activeRunId)?.status,
+  );
+  const message = useStreamStore((state) =>
+    state.runs.find((item) => item.id === state.activeRunId)?.message,
   );
   const start = useStreamStore((state) => state.start);
   const stop = useStreamStore((state) => state.stop);
   const rerun = useStreamStore((state) => state.rerun);
   const canRun =
-    connection === "open" && !!prompt.trim() && run?.status !== "streaming";
+    connection === "open" && !!prompt.trim() && runStatus !== "streaming";
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && canRun) {
@@ -55,6 +58,7 @@ export function PromptConsole({ model }: { model: Model }) {
         id="prompt-text"
         name="prompt"
         autoComplete="off"
+        maxLength={16000}
         value={prompt}
         onChange={(event) => setPrompt(event.target.value)}
         rows={2}
@@ -67,22 +71,22 @@ export function PromptConsole({ model }: { model: Model }) {
             type="button"
             onClick={() => start(prompt, model)}
             disabled={!canRun}
-            aria-busy={run?.status === "streaming"}
+            aria-busy={runStatus === "streaming"}
           >
             <Play aria-hidden />
-            {run?.status === "streaming" ? "Running…" : "Run"}
+            {runStatus === "streaming" ? "Running…" : "Run"}
           </Button>
           <Button
             type="button"
             onClick={stop}
-            disabled={run?.status !== "streaming"}
+            disabled={runStatus !== "streaming"}
           >
             <Square aria-hidden /> Stop
           </Button>
           <Button
             type="button"
             onClick={rerun}
-            disabled={connection !== "open" || !run || run.status === "streaming"}
+            disabled={connection !== "open" || !runStatus || runStatus === "streaming"}
           >
             <RotateCcw aria-hidden /> Rerun
           </Button>
@@ -101,9 +105,9 @@ export function PromptConsole({ model }: { model: Model }) {
           ))}
         </div>
       </div>
-      {run?.message && (
+      {message && (
         <p role="status" className="mt-3 text-sm text-driftwood">
-          {run.message}
+          {message}
         </p>
       )}
     </section>
