@@ -57,6 +57,7 @@ OUT = Path(__file__).parent / "out" / "steer_tokens"
 ORIGINAL_TOKENS = 512  # The live answer's cap.
 BRANCH_TOKENS = 400  # The sidecar's STEER_MAX_TOKENS default, used by run_steer.
 MAX_CASES = int(os.environ.get("BENCH_CASES", "0")) or None
+RESUME = os.environ.get("BENCH_RESUME") == "1"
 ARMS = ("S", "A", "P", "R")
 ARM_NAMES = {"S": "steered", "A": "anchor only", "P": "prefix + instruction", "R": "re-prompt"}
 
@@ -447,17 +448,32 @@ def report(cases: list[Case]) -> str:
 
 
 async def main() -> None:
-    cases: list[Case] = []
+    saved = OUT.with_suffix(".json")
+    cases: list[Case] = (
+        [Case(**row) for row in json.loads(saved.read_text())] if RESUME and saved.exists() else []
+    )
+    # Checkpoint IDs can shift between fresh originals of the same prompt.
+    # Resume at most one case per prompt and answer-position bucket.
+    finished = {(case.prompt, case.bucket) for case in cases}
+    if cases:
+        print(f"resuming from {len(cases)} saved cases", flush=True)
     timeout = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         for prompt in PROMPTS:
             if MAX_CASES and len(cases) >= MAX_CASES:
                 break
             print(f"{prompt}", flush=True)
-            parent = await original_run(client, prompt)
+            try:
+                parent = await original_run(client, prompt)
+            except (httpx.HTTPError, KeyError, ValueError) as exc:
+                print(f"  original failed: {type(exc).__name__}: {exc}", flush=True)
+                continue
             for bucket, checkpoint_id in pick_checkpoints(parent):
                 if MAX_CASES and len(cases) >= MAX_CASES:
                     break
+                key = (prompt, bucket)
+                if key in finished:
+                    continue
                 print(f"  {bucket} checkpoint {checkpoint_id}", flush=True)
                 try:
                     case = await run_case(client, parent, bucket, checkpoint_id)
@@ -466,8 +482,9 @@ async def main() -> None:
                     continue
                 if case is not None:
                     cases.append(case)
-            OUT.parent.mkdir(exist_ok=True)
-            OUT.with_suffix(".json").write_text(json.dumps([asdict(c) for c in cases], indent=1))
+                    finished.add(key)
+                    OUT.parent.mkdir(exist_ok=True)
+                    saved.write_text(json.dumps([asdict(c) for c in cases], indent=1))
     if not cases:
         raise SystemExit("no cases ran")
     OUT.with_suffix(".md").write_text(report(cases))
