@@ -213,6 +213,20 @@ interview). The contract therefore asks the UI to lead with the detail sentence;
 `apps/web` does not yet display AV events. Nothing in the pipeline verifies
 the interpretation.
 
+## Steering endpoints on the sidecar
+
+`apps/api/pod/av_sidecar.py` also serves `/contrast` (make a block-20 steer
+from original vs target section openings), `/steer` (stream a steered greedy
+continuation as NDJSON, one generation at a time), `/score` (AR fidelity of a
+replayed state against notes) and the research endpoint `/activation`. It now
+keeps the full Qwen CausalLM (with `lm_head`, about 1 GB more) and loads the
+NLA AR on **CPU in float32** (`AR_DEVICE`, default `cpu`): the A100 sits at
+about 72.7 of 80 GB, and this Pod's EPYC 7742 has no bf16. An AR score takes
+about 3 s. `/score` needs the calibration mean at
+`/workspace/hackgt/nla_calibration.pt` (`NLA_CALIBRATION`). At startup the
+log prints `hook check: max |block20 - hidden_states[21]| = 0`. The previous
+sidecar is kept at `/workspace/hackgt/av_sidecar.pre-steer.py`.
+
 ## Production: expose Qwen and the sidecar through Runpod's proxy
 
 For a deployed FastAPI (for example on Vercel), the Pod must be reachable
