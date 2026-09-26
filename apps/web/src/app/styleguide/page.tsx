@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Darumadrop_One, JetBrains_Mono, Sen } from "next/font/google";
 
+import { FeatureMapDemo } from "@/components/observatory/feature-map/feature-map-demo";
 import { Anglerfish } from "@/components/sea/decor/anglerfish";
 import { Pebbles } from "@/components/sea/decor/pebbles";
 import { Shell } from "@/components/sea/decor/shell";
@@ -156,6 +157,12 @@ export default function StyleguidePage() {
             </DeepViewport>
           </div>
         </div>
+      </section>
+
+      <section className={styles.section} aria-labelledby="map-title">
+        <h2 className={styles.sectionTitle} id="map-title">Live Feature Map Preview</h2>
+        <p className={styles.sectionCopy}>This preview uses sample activations while the shared stream store is being built. Each dot represents a feature; brighter, larger dots mean stronger activation.</p>
+        <FeatureMapDemo />
       </section>
 
       <section className={styles.section} aria-labelledby="ui-title">

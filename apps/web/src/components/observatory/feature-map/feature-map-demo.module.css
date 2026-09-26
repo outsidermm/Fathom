@@ -1,0 +1,26 @@
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .8rem;
+  margin-bottom: 1rem;
+}
+
+.field {
+  display: grid;
+  flex: 1 1 260px;
+  max-width: 460px;
+  gap: .35rem;
+  font-weight: 700;
+}
+
+.status {
+  min-width: 7rem;
+  color: var(--slate, #384151);
+  font-size: .875rem;
+}
+
+.viewport {
+  height: min(60svh, 480px);
+  min-height: 330px;
+}
