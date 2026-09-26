@@ -105,6 +105,11 @@ class StatusEvent(BaseModel):
     type: Literal["status"] = "status"
     state: StreamState
     message: Optional[str] = None
+    # Set with state "inspecting": the checkpoint the text is held at.
+    checkpoint_id: Optional[int] = None
+    label: Optional[str] = None
+    # Set with state "done": AV readings cancelled because they missed the answer.
+    av_dropped: Optional[int] = None
 
 
 ServerMessage = Union[TokenEvent, ActivationEvent, FlagEvent, AVEvent, AVErrorEvent, StatusEvent]
