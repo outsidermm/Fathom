@@ -50,10 +50,5 @@ export interface Feature {
   description: string;
 }
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
-export const WS_URL =
-  process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/stream";
-// Enable only for a backend that actually implements clamp/reset messages.
-export const STEERING_ENABLED =
-  process.env.NEXT_PUBLIC_STEERING_ENABLED === "true";
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/stream";
