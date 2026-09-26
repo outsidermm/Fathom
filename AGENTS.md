@@ -54,11 +54,11 @@ they're written to be pasted into a prompt: https://vercel.com/design/guidelines
 
 ## House rules
 
-1. **Build against the mock API, not against nothing.** `apps/api` already
-   runs a fake-but-correctly-shaped version of the real pipeline
-   (`docs/api-contract.md`). Don't wait on the real model integration —
-   wire your UI to `useActivationStream()` (`src/hooks/use-activation-stream.ts`)
-   today.
+1. **Use `docs/api-contract.md` for the live harness.** The existing
+   `useActivationStream()` hook and `apps/api` WebSocket are a legacy mock
+   for local UI development. They do not implement the conversation,
+   inspection, attachment, tool, or steering routes. Migrate the frontend
+   hook and backend schemas together when implementing the target contract.
 2. **Prefer prompting for real Next.js/shadcn code over "design tool then
    translate."** If you're generating a new screen from scratch, prompt
    v0.dev directly (it outputs Next.js + Tailwind + shadcn code you can
