@@ -59,7 +59,7 @@ automatic reloads.
    direction IDs. These make a branch reproducible enough to compare.
 2. Start Qwen generation and stream each token without waiting for AV.
    Capture the designated residual-stream tensor at the NLA extraction
-   point. Verify the exact hook against the upstream `hidden_states[20]`
+   point. Verify the exact hook against the upstream `hidden_states[21]`
    example; a one-layer offset would invalidate NLA output.
 3. At selected phrase or sentence boundaries, copy only the activation(s)
    needed for inspection. Give each sample a `run_id`, token position,
