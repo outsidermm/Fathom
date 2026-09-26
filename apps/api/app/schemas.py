@@ -85,7 +85,7 @@ class AVEvent(BaseModel):
     type: Literal["av"] = "av"
     explanation: str
     layer: Literal[20] = 20
-    sample: Literal["replayed_last_content_token"] = "replayed_last_content_token"
+    sample: Literal["replayed_last_content_token", "prompt_end"] = "replayed_last_content_token"
     checkpoint_id: int = Field(ge=0)
     position: int = Field(ge=0)
     label: str
@@ -93,6 +93,9 @@ class AVEvent(BaseModel):
     # carries most of the signal: show the detail first.
     genre: str = ""
     detail: str = ""
+    # Short "-ing" phrase compressing the detail ("advising to set a budget"),
+    # written by Qwen from the AV note alone. None when it could not be made.
+    focus: Optional[str] = None
     replay_ms: Optional[int] = None
     av_ms: Optional[int] = None
 
