@@ -26,6 +26,8 @@ from .schemas import (
     ResetClampsMessage,
     StartMessage,
     StatusEvent,
+    SteerAckEvent,
+    SteerMessage,
     StopMessage,
 )
 
@@ -124,6 +126,15 @@ async def ws_stream(websocket: WebSocket) -> None:
                     await send(
                         StatusEvent(state="error", message="Activation steering is not connected yet").model_dump(exclude_none=True)
                     )
+
+                elif msg_type == "steer":
+                    steer = SteerMessage.model_validate(raw)
+                    # Acknowledged only: status:error would end the client's run.
+                    await send(SteerAckEvent(
+                        checkpoint_id=steer.checkpoint_id,
+                        alternative_id=steer.alternative_id,
+                        message="Steering is not connected yet",
+                    ).model_dump(exclude_none=True))
 
                 elif msg_type == "stop":
                     StopMessage.model_validate(raw)

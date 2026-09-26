@@ -73,3 +73,36 @@ test('starting during backoff leaves exactly one socket and ignores stale events
   sockets[1].message({ type: 'token', index: 0, position: 0, text: 'fresh' });
   assert.deepEqual(state().runs.at(-1).tokens, [{ index: 0, text: 'fresh' }]);
 });
+
+test('finished runs accept late alternatives and steer acknowledgements while ignoring tokens', async (t) => {
+  const { sockets, state } = await setup(t);
+  const socket = sockets[0];
+  socket.open();
+  state().start('buy a car', 'qwen2.5-7b');
+  socket.message({
+    type: 'av', checkpoint_id: 0, position: 0, label: 'Plan',
+    explanation: 'Assess the budget.', genre: '', detail: 'Assess the budget.',
+    focus: 'assessing the car budget',
+  });
+  socket.message({ type: 'status', state: 'done' });
+  const alternatives = [
+    { id: 0, focus: 'weighing vehicle types', detail: 'Compare sizes and features.' },
+    { id: 1, focus: 'comparing financing options', detail: 'Compare loans and leases.' },
+  ];
+  socket.message({
+    type: 'av_alternatives', checkpoint_id: 0, position: 0, label: 'Plan', alternatives,
+  });
+  state().steer(0, 1);
+  assert.deepEqual(socket.sent.at(-1), { type: 'steer', checkpoint_id: 0, alternative_id: 1 });
+  socket.message({
+    type: 'steer_ack', checkpoint_id: 0, alternative_id: 1,
+    applied: false, message: 'Steering is not connected yet',
+  });
+  socket.message({ type: 'token', index: 0, position: 0, text: 'late token' });
+  const run = state().runs.at(-1);
+  assert.equal(run.status, 'done');
+  assert.deepEqual(run.tokens, []);
+  assert.deepEqual(run.readings[0].alternatives, alternatives);
+  assert.equal(run.readings[0].selectedAlternative, 1);
+  assert.equal(run.readings[0].steerMessage, 'Steering is not connected yet');
+});

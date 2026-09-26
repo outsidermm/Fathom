@@ -5,6 +5,7 @@ import {
   API_BASE,
   STEERING_ENABLED,
   WS_URL,
+  type AVAlternative,
   type Coords,
   type Feature,
   type Model,
@@ -29,6 +30,20 @@ export interface ActivationEntry {
   coords: Coords;
   explanation?: string;
 }
+// One AV checkpoint: the reading and, once they arrive, Qwen's suggested
+// alternatives. selectedAlternative is the user's steer pick.
+export interface Reading {
+  checkpointId: number;
+  position: number;
+  label: string;
+  focus: string | null;
+  detail: string;
+  genre: string;
+  error?: string;
+  alternatives?: AVAlternative[];
+  selectedAlternative?: number;
+  steerMessage?: string;
+}
 export interface Run {
   id: string;
   prompt: string;
@@ -36,6 +51,7 @@ export interface Run {
   clamps: Record<string, number>;
   tokens: TokenEntry[];
   flags: FlagEntry[];
+  readings: Record<number, Reading>;
   status: RunStatus;
   message?: string;
 }
@@ -56,6 +72,7 @@ interface StreamStore {
   resetClamps: () => void;
   selectFeature: (id: string | null) => void;
   hoverToken: (index: number | null) => void;
+  steer: (checkpointId: number, alternativeId: number) => void;
 }
 
 const HISTORY_LIMIT = 6000;
@@ -109,14 +126,65 @@ const patchRun = (id: string, patch: Partial<Run>) =>
   useStreamStore.setState((state) => ({
     runs: state.runs.map((run) => (run.id === id ? { ...run, ...patch } : run)),
   }));
+const patchReading = (
+  runId: string,
+  checkpointId: number,
+  patch: (reading: Reading | undefined) => Reading | undefined,
+) =>
+  useStreamStore.setState((state) => ({
+    runs: state.runs.map((run) => {
+      if (run.id !== runId) return run;
+      const reading = patch(run.readings[checkpointId]);
+      return reading
+        ? { ...run, readings: { ...run.readings, [checkpointId]: reading } }
+        : run;
+    }),
+  }));
 function handleMessage(message: ServerMessage) {
   const { activeRunId } = useStreamStore.getState();
   if (!activeRunId) return;
   const run = useStreamStore
     .getState()
     .runs.find((item) => item.id === activeRunId);
-  if (!run || run.status !== "streaming") return;
+  if (!run) return;
+  // Alternatives and steer acks can land after status:done.
+  const late = message.type === "av_alternatives" || message.type === "steer_ack";
+  if (run.status !== "streaming" && !(late && run.status === "done")) return;
   switch (message.type) {
+    case "av":
+      patchReading(activeRunId, message.checkpoint_id, (reading) => ({
+        ...reading,
+        checkpointId: message.checkpoint_id,
+        position: message.position,
+        label: message.label,
+        focus: message.focus ?? null,
+        detail: message.detail || message.explanation,
+        genre: message.genre,
+      }));
+      break;
+    case "av_error":
+      patchReading(activeRunId, message.checkpoint_id, () => ({
+        checkpointId: message.checkpoint_id,
+        position: message.position,
+        label: message.label,
+        focus: null,
+        detail: "",
+        genre: "",
+        error: message.message,
+      }));
+      break;
+    case "av_alternatives":
+      patchReading(activeRunId, message.checkpoint_id, (reading) =>
+        reading && { ...reading, alternatives: message.alternatives },
+      );
+      break;
+    case "steer_ack":
+      patchReading(activeRunId, message.checkpoint_id, (reading) =>
+        reading?.selectedAlternative === message.alternative_id
+          ? { ...reading, steerMessage: message.message }
+          : reading,
+      );
+      break;
     case "token":
       useStreamStore.setState((state) => ({
         runs: state.runs.map((item) =>
@@ -285,6 +353,7 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
       clamps,
       tokens: [],
       flags: [],
+      readings: {},
       status: "streaming",
     };
     set((state) => ({
@@ -345,5 +414,22 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   },
   hoverToken(index) {
     set({ hoveredTokenIndex: index });
+  },
+  // Always sent, unlike clamps: the backend only acknowledges it for now.
+  steer(checkpointId, alternativeId) {
+    const id = get().activeRunId;
+    if (!id) return;
+    patchReading(id, checkpointId, (reading) =>
+      reading && {
+        ...reading,
+        selectedAlternative: alternativeId,
+        steerMessage: undefined,
+      },
+    );
+    send({
+      type: "steer",
+      checkpoint_id: checkpointId,
+      alternative_id: alternativeId,
+    });
   },
 }));

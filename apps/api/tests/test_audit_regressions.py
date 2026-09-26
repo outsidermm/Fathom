@@ -23,11 +23,18 @@ class MessageTests(unittest.TestCase):
             ws.receive_json()
             for payload in ['{', 'null', '[]', '{"type":"clamp","value":2}',
                             '{"type":"start","prompt":" ","model":"qwen2.5-7b"}',
+                            '{"type":"steer","checkpoint_id":-1,"alternative_id":1}',
+                            '{"type":"steer","checkpoint_id":2,"alternative_id":5}',
                             '{"type":"unknown"}']:
                 ws.send_text(payload)
                 self.assertEqual(ws.receive_json()['state'], 'error')
             ws.send_bytes(b'{}')
             self.assertEqual(ws.receive_json()['state'], 'error')
+            ws.send_json({'type': 'steer', 'checkpoint_id': 2, 'alternative_id': 1})
+            self.assertEqual(ws.receive_json(), {
+                'type': 'steer_ack', 'checkpoint_id': 2, 'alternative_id': 1,
+                'applied': False, 'message': 'Steering is not connected yet',
+            })
             ws.send_json({'type': 'stop'})
             self.assertEqual(ws.receive_json(), {'type': 'status', 'state': 'idle'})
 

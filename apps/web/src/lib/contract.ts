@@ -16,9 +16,19 @@ export type ClientMessage =
   | { type: "start"; prompt: string; model: Model; pace?: boolean }
   | { type: "clamp"; feature_id: string; value: number } // -1..1
   | { type: "reset_clamps" }
-  | { type: "stop" };
+  | { type: "stop" }
+  // Pick one of a reading's alternatives. Acknowledged only (steer_ack).
+  | { type: "steer"; checkpoint_id: number; alternative_id: number };
 
 // ---- server -> client -------------------------------------------------
+
+// Another step the model could take at a checkpoint, in a reading's form.
+// Written by Qwen as a suggestion; not read from the model's state.
+export interface AVAlternative {
+  id: number; // 0..2
+  focus: string;
+  detail: string;
+}
 
 export interface Coords {
   x: number;
@@ -62,6 +72,20 @@ export type ServerMessage =
       checkpoint_id: number;
       position: number;
       label: string;
+    }
+  | {
+      type: "av_alternatives"; // after its "av"; may arrive after status:done
+      checkpoint_id: number;
+      position: number;
+      label: string;
+      alternatives: AVAlternative[]; // 2..3
+    }
+  | {
+      type: "steer_ack";
+      checkpoint_id: number;
+      alternative_id: number;
+      applied: false; // steering is not connected yet
+      message: string;
     }
   | {
       type: "status";
