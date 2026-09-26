@@ -5,20 +5,20 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 touch-manipulation items-center justify-center gap-2 rounded-xl font-ui text-sm font-bold whitespace-nowrap transition-[transform,box-shadow,background-color,color] duration-100 outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sand disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-gold text-gold-ink shadow-[0_4px_0_#c99a4e] hover:bg-gold/90 active:translate-y-[3px] active:shadow-[0_1px_0_#c99a4e]",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
         destructive:
-          "bg-driftwood text-paper hover:bg-driftwood/90",
+          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
         outline:
-          "border-2 border-crate bg-sand-light text-driftwood hover:bg-crate/20",
+          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
-          "wood-grain -rotate-[1.5deg] text-driftwood shadow-[0_4px_0_var(--plank-dark)] hover:rotate-0 active:translate-y-[3px] active:shadow-[0_1px_0_var(--plank-dark)]",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost:
-          "text-ink hover:bg-sand-light",
-        link: "text-harbor underline-offset-4 hover:underline",
+          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

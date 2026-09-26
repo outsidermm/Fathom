@@ -64,7 +64,7 @@ If you fall behind, cut from the bottom of each column. Never cut the store
 4. Codex skills, from the repo root:
    ```bash
    npx skills add vercel-labs/agent-skills --skill web-design-guidelines
-   npx skills add vercel-labs/agent-skills --skill vercel-react-best-practices
+   npx skills add vercel-labs/agent-skills --skill react-nextjs
    ```
    Then **start a fresh Codex session** so it loads them.
 5. One of you runs the §10 snippet from `design-system.md` on hack.gt and
@@ -118,7 +118,7 @@ Paste into Codex:
 > them to globals.css in parallel; if one's missing when you run, add a
 > local fallback like `var(--sand, #e5ccae)` and tell Samuel). Then create
 > `apps/web/src/app/styleguide/page.tsx` that shows every §3 color swatch
-> with its name and hex, the four type roles at each scale step, every sea
+> with its name and hex, the four fonts at each scale step, every sea
 > primitive, and every `components/ui` primitive. Respect
 > prefers-reduced-motion. Don't edit globals.css, layout.tsx, or
 > components/ui.
@@ -208,7 +208,7 @@ ConnectionBadge; ignore events that arrive while no run is active.
 > run and a requestAnimationFrame-batched `subscribe`. Websocket reconnect
 > with backoff, as specified. Fetch `GET /api/features` on load. Delete
 > `src/hooks/use-activation-stream.ts` once nothing imports it. Then build
-> `top-bar.tsx` (TopBar pill per design-system §6, wordmark in Darumadrop One, model
+> `top-bar.tsx` (TopBar pill per design-system §6, wordmark in Chewy, model
 > select, ConnectionBadge that shows a Chalkboard-style tooltip when
 > retrying) and `prompt-console.tsx` (textarea, 3 sample-prompt chips:
 > "Explain why the sky is blue", "Is it safe to take ibuprofen with
@@ -263,7 +263,7 @@ with no React re-renders per event (check the React DevTools profiler).
 > underline, a ⚠ icon, and a tooltip ("hedging · 81%"). It auto-scrolls,
 > but pauses auto-scroll while the user is hovering.
 > (2) `feature-inspector.tsx`: a PaperNote shown when `selectedFeatureId` is
-> set, showing the label (Sen), cluster, description, and feature id in
+> set, showing the label (Fredoka), cluster, description, and feature id in
 > mono. Add a small SVG sparkline of this feature's activation value across
 > the active run's tokens (from `activationBus.forRun`, recomputed when a
 > run finishes or the selection changes, not per event), single `--harbor`
@@ -287,7 +287,7 @@ with no React re-renders per event (check the React DevTools profiler).
 > `clamps`. (3) `ping` rings in `--alert` when a flag event fires,
 > centered on the most active node for that token. (4) When
 > `hoveredTokenIndex` is set, dim every node except those that fired on
-> that token (`activationBus.forToken`). (5) Cluster labels in Darumadrop One
+> that token (`activationBus.forToken`). (5) Cluster labels in Chewy
 > `--deep-ink` at 70% opacity at each cluster centroid (average of member
 > coords). (6) `legend.tsx`, pinned bottom-right of the map: a glow ramp
 > labeled "weak → strong activation", ring swatches "clamped +" and

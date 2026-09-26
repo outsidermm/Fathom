@@ -17,19 +17,18 @@ at this file, or just paste its contents into your first prompt of a session.
 - **React 19**, TypeScript, Tailwind v4 (CSS-first config — no
   `tailwind.config.js`, theme tokens live in `src/app/globals.css` under
   `@theme inline`).
-- **shadcn/ui**, `new-york` style, `stone` base color, already
+- **shadcn/ui**, `new-york` style, `neutral` base color, already
   initialized (`apps/web/components.json`). `Button`, `Card`, `Input` exist
   under `src/components/ui/` — compose from those before writing new
   primitives. shadcn ships its own registry-aware agent skill
   (`npx shadcn@latest` picks it up automatically in a project with
   `components.json`) — if your agent has network access, let it pull new
   components from the registry rather than hand-rolling them.
-- **Design direction**: follow `docs/design-system.md` for the HackGT
-  seaside "Surface & Deep" theme. Surface UI uses sand, paper, planks, and
-  teal ink; the feature map lives in a dark ocean viewport. Activation
-  strength uses the `--glow-1` through `--glow-5` ramp, clamps use
-  `--clamp-up` and `--clamp-down`, and flags use `--alert` with an icon
-  and label.
+- **Design direction**: brutalist, near-monochrome shell (the `--background`
+  / `--foreground` / `--border` / `--muted` tokens). Color is reserved for
+  the live feature-map visualization only — `--signal-cold`,
+  `--signal-hot`, `--signal-alert` in `globals.css`. Don't add color to nav,
+  cards, or form chrome; do use it in anything rendering activation data.
 
 ## Install these before you start prompting
 
@@ -46,7 +45,7 @@ discipline, list virtualization, memoization) worth adding given this app is
 rendering a live-updating activation stream:
 
 ```
-npx skills add https://github.com/vercel-labs/agent-skills --skill vercel-react-best-practices
+npx skills add https://github.com/vercel-labs/agent-skills --skill react-nextjs
 ```
 
 (Both work as Claude Code / Cursor / Windsurf skills. If your tool doesn't
@@ -73,6 +72,5 @@ they're written to be pasted into a prompt: https://vercel.com/design/guidelines
    `<button>`/`<a>` underneath it** — judges and demo day will involve a
    keyboard at some point. The web-design-guidelines skill above enforces
    this; don't turn it off.
-4. **Don't invent a second color system.** Use the palette and color
-   meanings in `docs/design-system.md` §3: one glow ramp for activation
-   strength, gold/violet rings for clamps, and alert plus text/icon for flags.
+4. **Don't invent a second color system.** If something needs a status
+   color, it's one of the three `--signal-*` tokens, not a new hex value.

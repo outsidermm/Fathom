@@ -27,12 +27,14 @@ tool lets you see down into the deep and steer what's there.
 ## 2. Sources and confidence
 
 - **Colors** were sampled from pixels in full-page hack.gt screenshots taken
-  on Sep 25, 2026 (median of small patches, not eyeballed). The ink,
-  harbor, and coral-ink text values were then confirmed from the site's
-  computed styles. Gradients and textures can make surface pixels differ.
-- **Fonts were confirmed from computed styles on hack.gt on Sep 25, 2026.**
-  The site uses Darumadrop One for display and Sen for UI and body copy.
-  Both are available through `next/font/google`.
+  on Sep 25, 2026 (median of small patches, not eyeballed). They are exact
+  as rendered, but gradients and textures mean a real CSS value may differ
+  by a few points.
+- **Fonts could NOT be read from screenshots.** The families below are the
+  closest free Google Fonts matches. Before Phase 1, one person spends two
+  minutes running the snippet in §10 on hack.gt in their own browser. If it
+  reports different families that are also on Google Fonts, use those. If
+  they're custom or licensed fonts, keep the matches below.
 - **Motion** on hack.gt wasn't observable from static screenshots. §7 is
   our own motion vocabulary built to fit the illustrations. Glance at the
   live site and match anything obvious (for example, if the waves drift,
@@ -55,9 +57,9 @@ tool lets you see down into the deep and steer what's there.
 | `--wood` | `#af6f40` | schedule wood wall | large wood backdrop |
 | `--driftwood` | `#503120` | active "Day 1" button, event titles | dark ink on paper, active states |
 | `--crate` | `#c5a97c` | crate slats | inactive tab text and outlines on driftwood |
-| `--ink` | `#055958` | "About"/"Tracks" headings, body copy | **primary text color** on sand and water |
+| `--ink` | `#265858` | "About"/"Tracks" headings, body copy | **primary text color** on sand and water |
 | `--slate` | `#384151` | nav links | nav and secondary UI text |
-| `--harbor` | `#0871a3` | "Friday, September 25", track names | links, secondary headings |
+| `--harbor` | `#326f9f` | "Friday, September 25", track names | links, secondary headings |
 | `--water` | `#aae2f0` | Tracks section water | shallow-water surfaces |
 | `--water-mid` | `#9fd5e6` | sponsor section sea | gradients |
 | `--water-deep` | `#5896ab` | lower sea band | transition into the Deep |
@@ -65,7 +67,7 @@ tool lets you see down into the deep and steer what's there.
 | `--gold` | `#f0c37b` | "Register" button | **primary CTA** (Run, Rerun) |
 | `--gold-ink` | `#56321d` | Register button text | text on gold |
 | `--coral` | `#e27459` | market awning red | decorative accent |
-| `--coral-ink` | `#e56236` | schedule times | **large text only** (see §4) |
+| `--coral-ink` | `#d56a43` | schedule times | **large text only** (see §4) |
 | `--starfish` | `#e5a83d` | starfish | decorative accent |
 | `--shell` | `#e08b6a` | scallop shell | decorative accent |
 | `--sea-glass` | `#72c3d5` | mascot fur | decorative accent |
@@ -114,13 +116,13 @@ WCAG ratios, computed:
 | `--driftwood` on `--paper` | 10.3 | all text |
 | `--slate` on `--sand-light` | 9.0 | all text |
 | `--gold-ink` on `--gold` | 6.8 | all text (buttons) |
-| `--ink` on `--water` | 5.8 | all text |
-| `--ink` on `--sand` | 5.3 | all text |
+| `--ink` on `--water` | 5.7 | all text |
+| `--ink` on `--sand` | 5.2 | all text |
 | muted text `#5f4e3e` on `--sand` / `--sand-light` / `--paper` | 5.1 / 6.9 / 7.0 | all text (secondary copy, captions) |
 | `--harbor` on `--paper` | 4.7 | all text |
 | `--driftwood` on `--plank` | 4.2 | text ≥ 18px bold only |
 | `--foam` on `--wood` | 4.1 | text ≥ 18px bold only |
-| `--coral-ink` on `--paper` | 3.0 | text ≥ 24px only |
+| `--coral-ink` on `--paper` | 3.1 | text ≥ 24px only |
 | `--foam` on `--plank` | **2.8** | **never for text.** hack.gt does this on its FAQ planks; we don't. Use `--driftwood` on planks. |
 | `--deep-ink` on `--deep` | 13.9 | all text on the map |
 
@@ -128,25 +130,26 @@ WCAG ratios, computed:
 
 | Role | Family (closest match) | Weight | Where |
 |---|---|---|---|
-| Display | **Darumadrop One** | 400 | Page and section titles, big numbers, map cluster labels ≥ 20px. Chunky, bouncy, hand-lettered like "Tracks"/"Schedule". |
-| UI | **Sen** | 700 | Nav, buttons, tabs, panel titles, token chips. |
-| Body | **Sen** | 400–700 | Paragraphs, descriptions, tooltips. |
+| Display | **Chewy** | 400 | Page and section titles, big numbers, map cluster labels ≥ 20px. Chunky, bouncy, hand-lettered like "Tracks"/"Schedule". |
+| UI | **Fredoka** | 500–600 | Nav, buttons, tabs, panel titles, token chips. Rounded bold like the FAQ questions and nav. |
+| Body | **Nunito** | 400–700 | Paragraphs, descriptions, tooltips. Rounded and readable. |
 | Mono | **JetBrains Mono** | 400 | Feature IDs, activation values, token indices only. |
 
 Set it up with `next/font/google` in `apps/web/src/app/layout.tsx`. This
 replaces Geist:
 
 ```tsx
-import { Darumadrop_One, Sen, JetBrains_Mono } from "next/font/google";
+import { Chewy, Fredoka, Nunito, JetBrains_Mono } from "next/font/google";
 
-const display = Darumadrop_One({ weight: "400", subsets: ["latin"], variable: "--font-darumadrop" });
-const body = Sen({ subsets: ["latin"], variable: "--font-sen" });
-const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
+const display = Chewy({ weight: "400", subsets: ["latin"], variable: "--font-display" });
+const ui = Fredoka({ subsets: ["latin"], variable: "--font-ui" });
+const body = Nunito({ subsets: ["latin"], variable: "--font-body" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
-// <html className={`${display.variable} ${body.variable} ${mono.variable}`}>
+// <html className={`${display.variable} ${ui.variable} ${body.variable} ${mono.variable}`}>
 ```
 
-Type scale: 14 / 16 / 20 / 28 / 40 / 56px. Darumadrop One only at 20px and up.
+Type scale: 14 / 16 / 20 / 28 / 40 / 56px. Chewy only at 20px and up.
 Letter-spacing 0 (don't track out rounded fonts). Headings in `--ink` on
 light surfaces and `--foam` on wood (with the §6 text-shadow).
 
@@ -158,13 +161,13 @@ borders anywhere.
 
 | Primitive | hack.gt reference | Spec |
 |---|---|---|
-| **TopBar** | cream nav pill | `--sand-light` at 92% opacity, `border-radius: 20px`, soft shadow `0 6px 0 rgb(0 0 0 / 0.06)`, floating 16px from the top edge, `--slate` Sen links |
-| **GoldButton** (primary CTA) | "Register" | `--gold` fill, `--gold-ink` Sen 700, radius 12px, bottom "lip" `box-shadow: 0 4px 0 #c99a4e`. On press: `translateY(3px)`, lip shrinks to 1px |
+| **TopBar** | cream nav pill | `--sand-light` at 92% opacity, `border-radius: 20px`, soft shadow `0 6px 0 rgb(0 0 0 / 0.06)`, floating 16px from the top edge, `--slate` Fredoka links |
+| **GoldButton** (primary CTA) | "Register" | `--gold` fill, `--gold-ink` Fredoka 600, radius 12px, bottom "lip" `box-shadow: 0 4px 0 #c99a4e`. On press: `translateY(3px)`, lip shrinks to 1px |
 | **PlankButton** (secondary) | wooden "Register" sign | `--plank` with a wood-grain gradient (§6a), `--driftwood` text, rotate −1.5deg, a small leaf/rope decoration optional |
 | **CrateTabs** | Day 1 / Day 2 / Day 3 | Tab group on a `--crate` slatted backdrop. Active: `--driftwood` fill, `--crate` text. Inactive: transparent with a 2px `--foam` outline and `--foam` text (large text only). Built on Radix Tabs |
-| **PaperNote** | pinned schedule paper | `--paper`, radius 4px, rotate between −1.5 and 1.5deg, pin dot at the top center, shadow `0 10px 24px rgb(80 49 32 / 0.18)`. Title in Sen `--harbor` with a `--coral` 3px underline squiggle |
-| **Plank** (accordion row) | FAQ planks | full-width `--plank` bar, radius 10px, irregular edges via `clip-path` or an SVG mask, `--plank-dark` bottom edge, `--driftwood` Sen text, chevron right. Built on Radix Accordion |
-| **Chalkboard** | "Registration open until…" sign | `#2a2a2a` board, `--plank` frame, `--foam` Sen text. Use for empty and connection states ("Waiting for the tide…") |
+| **PaperNote** | pinned schedule paper | `--paper`, radius 4px, rotate between −1.5 and 1.5deg, pin dot at the top center, shadow `0 10px 24px rgb(80 49 32 / 0.18)`. Title in Fredoka `--harbor` with a `--coral` 3px underline squiggle |
+| **Plank** (accordion row) | FAQ planks | full-width `--plank` bar, radius 10px, irregular edges via `clip-path` or an SVG mask, `--plank-dark` bottom edge, `--driftwood` Fredoka text, chevron right. Built on Radix Accordion |
+| **Chalkboard** | "Registration open until…" sign | `#2a2a2a` board, `--plank` frame, `--foam` Fredoka text. Use for empty and connection states ("Waiting for the tide…") |
 | **WaveDivider** | every section boundary | SVG wave path with a white foam stroke, drifting horizontally (§7). Used above the Deep |
 | **SeaPanel** | Tracks water | `--water` with a caustic ripple pattern (SVG or CSS radial gradients at ~20% white) |
 | **DeepViewport** | (ours) | vertical gradient `--trench` to `--deep` to `--abyss`, a faint caustic shimmer near the top, the WaveDivider sitting on its top edge |
@@ -223,7 +226,7 @@ animation library. The map animates on the canvas inside its own
   starfish, scallop shell, pebbles, a rope knot, a leaf sprig, a jellyfish
   or anglerfish for the Deep. Flat fills from the palette plus a slightly
   darker outline match their style. Keep each under ~40 path nodes.
-- Our wordmark is our project name in Darumadrop One. Don't use a HackGT logo.
+- Our wordmark is our project name in Chewy. Don't use a HackGT logo.
 - If the team wants an official HackGT element (for example, the track
   name treatment), ask HexLabs at the help desk first.
 
@@ -244,7 +247,7 @@ for no visual gain.)
 | `apps/web/src/app/globals.css` | Replace the neutral `:root`/`.dark` blocks and `--signal-*` with the §3 tokens. **Map shadcn's semantic names onto the new palette** so existing components keep working: `--background: var(--sand)`, `--foreground: var(--ink)`, `--card: var(--paper)`, `--card-foreground: var(--driftwood)`, `--primary: var(--gold)`, `--primary-foreground: var(--gold-ink)`, `--secondary: var(--sand-light)`, `--secondary-foreground: var(--slate)`, `--muted: var(--sand-light)`, `--muted-foreground: #5f4e3e`, `--accent: var(--water)`, `--accent-foreground: var(--ink)`, `--border: rgb(80 49 32 / 0.18)`, `--input: rgb(80 49 32 / 0.25)`, `--ring: var(--harbor)`, `--destructive: var(--alert)`, `--radius: 0.875rem`. Expose every §3 token in `@theme inline` as `--color-*` so Tailwind classes like `bg-sand` and `text-ink` exist. Replace `--font-sans`/`--font-mono` with `--font-display`, `--font-ui`, `--font-body`, `--font-mono`. Remove the `.dark` block: the app is light-surface with a dark Deep, not a dark-mode toggle. Add the §7 keyframes and reduced-motion rule. |
 | `apps/web/src/app/layout.tsx` | Swap Geist for the §5 fonts. `body` uses `font-body`. |
 | `apps/web/components.json` | Keep. Set `"baseColor"` to `"stone"` (closest warm base; tokens override it anyway). |
-| `apps/web/src/components/ui/button.tsx` | Keep Radix Slot/cva. Restyle variants: `default` becomes GoldButton, `secondary` becomes PlankButton, `outline` becomes a crate outline, `ghost` becomes a sand hover. Use Sen. |
+| `apps/web/src/components/ui/button.tsx` | Keep Radix Slot/cva. Restyle variants: `default` becomes GoldButton, `secondary` becomes PlankButton, `outline` becomes a crate outline, `ghost` becomes a sand hover. Use Fredoka. |
 | `apps/web/src/components/ui/card.tsx` | Default look becomes PaperNote without rotation; add a `variant` prop: `paper` \| `plank` \| `sea`. |
 | `apps/web/src/components/ui/input.tsx` | `--paper` fill, 2px `--input` border, radius 12px, `--ring` focus ring 3px. |
 | New primitives | `npx shadcn@latest add tabs accordion slider tooltip dialog command`, then restyle them per §6 (CrateTabs, Plank accordion, clamp Slider, Chalkboard/Paper tooltip, cmd-K search). |

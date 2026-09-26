@@ -1,21 +1,14 @@
 import type { Metadata } from "next";
-import { Darumadrop_One, JetBrains_Mono, Sen } from "next/font/google";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const display = Darumadrop_One({
-  weight: "400",
-  variable: "--font-darumadrop",
+const geistSans = Geist({
+  variable: "--font-geist-sans",
   subsets: ["latin"],
 });
 
-const body = Sen({
-  variable: "--font-sen",
-  subsets: ["latin"],
-});
-
-const mono = JetBrains_Mono({
-  variable: "--font-jetbrains",
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
@@ -28,11 +21,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
-      </body>
+      <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }

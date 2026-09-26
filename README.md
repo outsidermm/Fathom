@@ -12,8 +12,6 @@ sampled activations and let users steer and compare revised continuations.
 
 See `AGENTS.md` for frontend AI-assistant guidelines and `docs/api-contract.md`
 for the interface both sides build against.
-Design: see [docs/design-system.md](docs/design-system.md). Samuel's frontend
-work follows the phases in [docs/frontend-roadmap.md](docs/frontend-roadmap.md).
 
 Repository owner and deployment documentation: [outsidermm](https://github.com/outsidermm).
 The NLA models and inference client are upstream work by
