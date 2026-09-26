@@ -7,15 +7,21 @@ import type { SeaScene } from "./sea-renderer";
  * Loads a WebGL scene only once its host nears the screen, keeps it in sync with `paused`,
  * and marks the host `data-renderer="fallback"` if the GPU path fails. `load` must be stable.
  */
-export function useSeaScene(load: () => Promise<(host: HTMLDivElement, paused: boolean) => SeaScene>, paused: boolean) {
+export function useSeaScene(load: () => Promise<(host: HTMLDivElement, paused: boolean) => SeaScene>, paused: boolean, receded = false) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SeaScene | null>(null);
   const pausedRef = useRef(paused);
+  const recededRef = useRef(receded);
 
   useEffect(() => {
     pausedRef.current = paused;
     sceneRef.current?.setPaused(paused);
   }, [paused]);
+
+  useEffect(() => {
+    recededRef.current = receded;
+    sceneRef.current?.setReceded?.(receded);
+  }, [receded]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -30,6 +36,7 @@ export function useSeaScene(load: () => Promise<(host: HTMLDivElement, paused: b
         const create = await load();
         if (disposed) return;
         sceneRef.current = create(host, pausedRef.current);
+        sceneRef.current.setReceded?.(recededRef.current);
       } catch {
         host.dataset.renderer = "fallback";
       }

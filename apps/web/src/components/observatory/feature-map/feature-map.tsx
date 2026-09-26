@@ -6,6 +6,8 @@ import { Legend } from "@/components/observatory/legend";
 import { DeepViewport } from "@/components/sea/deep-viewport";
 import { PaperNote } from "@/components/sea/paper-note";
 
+import { BRAIN_BOUNDS, BRAIN_REGIONS, layoutBrain, type Vec3 } from "./brain-layout";
+import type { BrainScene, NeuronState } from "./brain-scene";
 import type { ActivationSource, MapFeature, MapFlag } from "./fake-activation-bus";
 import styles from "./feature-map.module.css";
 
@@ -17,6 +19,19 @@ interface NodeState {
 const FALLBACK_GLOWS = ["#1d6270", "#228596", "#25aabe", "#53cfdc", "#9deff3"];
 const EMPTY_CLAMPS: Readonly<Record<string, number>> = {};
 const EMPTY_FLAGS: readonly MapFlag[] = [];
+// How long a firing takes to travel down a neuron's axon.
+const SIGNAL_MS = 900;
+
+/** The neuron within 16px of `pointer`, if any. */
+function nearestNeuron(positions: ReadonlyMap<string, { x: number; y: number }>, pointer: { x: number; y: number }) {
+  let nearest: string | null = null;
+  let distance = 16;
+  for (const [id, point] of positions) {
+    const candidate = Math.hypot(pointer.x - point.x, pointer.y - point.y);
+    if (candidate < distance) { distance = candidate; nearest = id; }
+  }
+  return nearest;
+}
 
 export interface FeatureMapProps {
   features: readonly MapFeature[];
@@ -59,6 +74,11 @@ function FeatureMapInner({
   const selection = selectedFeatureId === undefined ? localSelection : selectedFeatureId;
   const tooltipFeature = features.find((feature) => feature.id === (hoveredId ?? keyboardId));
   const presentationRef = useRef({ selection, keyboardId, hoveredId, clamps, tokenFeatures: null as Set<string> | null });
+  const motionPausedRef = useRef(ambientPaused);
+  // Last pointer position over the map; neurons move under a still pointer as the brain turns.
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => { motionPausedRef.current = ambientPaused; }, [ambientPaused]);
 
   // React handles interaction changes; the activation stream only updates refs.
   useEffect(() => {
@@ -112,6 +132,7 @@ function FeatureMapInner({
     const clampUp = computed.getPropertyValue("--clamp-up").trim() || "#c38300";
     const clampDown = computed.getPropertyValue("--clamp-down").trim() || "#8362cd";
     const alert = computed.getPropertyValue("--alert").trim() || "#e84f27";
+    const abyss = computed.getPropertyValue("--abyss").trim() || "#061a26";
     const displayFont = computed.getPropertyValue("--font-display").trim() || "sans-serif";
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     let reducedMotion = reducedMotionQuery.matches;
@@ -119,83 +140,58 @@ function FeatureMapInner({
     let height = 1;
     let frameId = 0;
     let lastFrameAt = 0;
-    const positions = new Map(features.map((feature) => [feature.id, feature.coords]));
+    let disposed = false;
+
+    // Features are neurons inside a 3D fish brain: one region per cluster.
+    const brain = layoutBrain(features);
+    const positions = brain.positions;
     const states = nodeStatesRef.current;
     for (const id of states.keys()) if (!positions.has(id)) states.delete(id);
     for (const feature of features) {
       if (!states.has(feature.id)) states.set(feature.id, { glow: 0, pulses: [] });
     }
+    const labelAnchors = BRAIN_REGIONS.flatMap((region, index) => {
+      const label = brain.labels[index];
+      return label ? [{ label, center: region.center }] : [];
+    });
 
-    const clusters = new Map<string, { x: number; y: number; count: number }>();
-    for (const feature of features) {
-      const centroid = clusters.get(feature.cluster) ?? { x: 0, y: 0, count: 0 };
-      centroid.x += feature.coords.x;
-      centroid.y += feature.coords.y;
-      centroid.count += 1;
-      clusters.set(feature.cluster, centroid);
+    // The WebGL scene loads lazily; until then (or if WebGL fails) a flat
+    // top-down view draws the neurons as dots.
+    let scene3d: BrainScene | null = null;
+    let flatScale = 1;
+    function flatProject(point: Vec3) {
+      // Nose up, like the 3D view's starting angle.
+      return { x: width / 2 + point.z * flatScale, y: height / 2 + 10 - (point.x - BRAIN_BOUNDS.center.x) * flatScale };
+    }
+    const projectPoint = (point: Vec3) => (scene3d ? scene3d.project(point) : flatProject(point));
+    if (positions.size > 0) {
+      void import("./brain-scene").then(({ createBrainScene }) => {
+        if (disposed) return;
+        try {
+          scene3d = createBrainScene(host, canvas, glowColors, deepInk);
+          scene3d.setNeurons([...positions].map(([id, position]) => ({ id, position })));
+          scene3d.resize(width, height);
+        } catch {
+          scene3d = null;
+        }
+      });
     }
 
-    let project = (x: number, y: number): [number, number] => [x, y];
-    let clusterLabels: { label: string; x: number; y: number; anchorX: number; anchorY: number; width: number }[] = [];
-
-    function updateProjection() {
-      const coords = [...positions.values()];
-      if (coords.length === 0) {
-        project = () => [width / 2, height / 2];
-        return;
-      }
-      let minX = Infinity;
-      let maxX = -Infinity;
-      let minY = Infinity;
-      let maxY = -Infinity;
-      for (const point of coords) {
-        minX = Math.min(minX, point.x);
-        maxX = Math.max(maxX, point.x);
-        minY = Math.min(minY, point.y);
-        maxY = Math.max(maxY, point.y);
-      }
-      const sidePadding = Math.min(56, Math.max(28, Math.min(width, height) * 0.08));
-      const topPadding = Math.max(88, sidePadding);
-      const availableWidth = Math.max(1, width - sidePadding * 2);
-      const availableHeight = Math.max(1, height - topPadding - 94);
-      const scale = Math.min(
-        availableWidth / Math.max(1, maxX - minX),
-        availableHeight / Math.max(1, maxY - minY),
-      );
-      const left = sidePadding + (availableWidth - (maxX - minX) * scale) / 2;
-      const top = topPadding + (availableHeight - (maxY - minY) * scale) / 2;
-      project = (x, y) => [left + (x - minX) * scale, top + (maxY - y) * scale];
+    function updateScreenPositions() {
       const projected = screenPositionsRef.current;
       projected.clear();
-      for (const [id, coords] of positions) {
-        const [x, y] = project(coords.x, coords.y);
-        projected.set(id, { x, y });
+      for (const [id, point] of positions) {
+        const screen = projectPoint(point);
         const button = buttonRefs.current.get(id);
-        if (button) { button.style.left = `${x}px`; button.style.top = `${y}px`; }
+        if (!screen) { if (button) button.style.display = "none"; continue; }
+        projected.set(id, screen);
+        if (button) { button.style.display = ""; button.style.left = `${screen.x}px`; button.style.top = `${screen.y}px`; }
       }
       const ui = presentationRef.current;
       const point = projected.get(ui.hoveredId ?? ui.keyboardId ?? "");
       if (point && tooltipRef.current) {
         tooltipRef.current.style.left = `${Math.max(8, Math.min(width - 228, point.x + 18))}px`;
         tooltipRef.current.style.top = `${Math.max(76, point.y - 100)}px`;
-      }
-      // Keep labels linked to their centroids while separating overlapping words.
-      clusterLabels = [];
-      if (context) context.font = `18px ${displayFont}`;
-      for (const [label, centroid] of clusters) {
-        const [anchorX, anchorY] = project(centroid.x / centroid.count, centroid.y / centroid.count);
-        const labelWidth = Math.max(context?.measureText(label).width ?? 0, label.length * 10) + 12;
-        const x = Math.max(labelWidth / 2 + 8, Math.min(width - labelWidth / 2 - 8, anchorX));
-        let y = anchorY - 19;
-        for (let attempt = 0; attempt < 20; attempt += 1) {
-          const offset = attempt === 0 ? 0 : Math.ceil(attempt / 2) * 23 * (attempt % 2 ? -1 : 1);
-          const candidate = Math.max(84, Math.min(height - 104, anchorY - 19 + offset));
-          if (!clusterLabels.some((placed) => Math.abs(placed.x - x) < (placed.width + labelWidth) / 2 && Math.abs(placed.y - candidate) < 23)) {
-            y = candidate;
-            break;
-          }
-        }
-        clusterLabels.push({ label, x, y, anchorX, anchorY, width: labelWidth });
       }
     }
 
@@ -212,29 +208,24 @@ function FeatureMapInner({
         canvas.height = pixelHeight;
       }
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
-      updateProjection();
+      flatScale = Math.min((width - 64) / BRAIN_BOUNDS.width, (height - 190) / BRAIN_BOUNDS.length);
+      scene3d?.resize(width, height);
     }
 
     const observer = new ResizeObserver(resize);
     observer.observe(host);
     resize();
-    let disposed = false;
-    void document.fonts.ready.then(() => { if (!disposed) updateProjection(); });
 
     const unsubscribe = source.subscribe((batch) => {
       const now = performance.now();
-      let newPosition = false;
       for (const activation of batch) {
-        if (!positions.has(activation.featureId)) {
-          positions.set(activation.featureId, activation.coords);
-          newPosition = true;
-        }
+        // A feature not yet in `features` has no neuron; track its glow so it
+        // lights up as soon as the next layout places it.
         const state = states.get(activation.featureId) ?? { glow: 0, pulses: [] };
         state.glow = Math.max(0, Math.min(1, activation.value));
         if (!reducedMotion) state.pulses.push({ startedAt: now, strength: state.glow });
         states.set(activation.featureId, state);
       }
-      if (newPosition) updateProjection();
     });
 
     const onMotionChange = (event: MediaQueryListEvent) => {
@@ -254,69 +245,51 @@ function FeatureMapInner({
       context.stroke();
     }
 
+    let now = 0;
+    const neuronState = (id: string): NeuronState => {
+      const state = states.get(id);
+      const ui = presentationRef.current;
+      const latest = state?.pulses.at(-1);
+      const signal = latest ? (now - latest.startedAt) / SIGNAL_MS : -1;
+      return {
+        glow: state?.glow ?? 0,
+        dim: ui.tokenFeatures && !ui.tokenFeatures.has(id) ? .18 : 1,
+        signal: signal >= 0 && signal < 1 ? signal : -1,
+      };
+    };
+
     function draw(timestamp: number) {
       if (!context) return;
+      now = timestamp;
       const elapsed = lastFrameAt === 0 ? 0 : Math.min(100, timestamp - lastFrameAt);
       lastFrameAt = timestamp;
-      context.clearRect(0, 0, width, height);
-      const ui = presentationRef.current;
-      context.font = `18px ${displayFont}`;
-      context.textAlign = "center";
-      context.fillStyle = deepInk;
-      context.globalAlpha = .7;
-      for (const label of clusterLabels) {
-        if (Math.abs(label.y - label.anchorY) > 24) {
-          context.globalAlpha = .25;
-          context.strokeStyle = deepInk;
-          context.lineWidth = 1;
-          context.beginPath();
-          context.moveTo(label.anchorX, label.anchorY);
-          context.lineTo(label.x, label.y + 5);
-          context.stroke();
-        }
-        context.globalAlpha = .7;
-        context.fillText(label.label, label.x, label.y);
-      }
-
-      for (const [id, coords] of positions) {
-        const state = states.get(id);
-        if (!state) continue;
+      for (const state of states.values()) {
         if (!reducedMotion && state.glow > 0) {
           state.glow *= Math.exp(-elapsed / 450);
           if (state.glow < 0.02) state.glow = 0;
         }
-        const glow = state.glow;
-        const color = glowColors[Math.min(4, Math.floor(glow * 5))];
-        const radius = 3 + 9 * glow;
-        const [x, y] = project(coords.x, coords.y);
-        const dim = ui.tokenFeatures && !ui.tokenFeatures.has(id) ? .18 : 1;
+        while (state.pulses.length && timestamp - state.pulses[0].startedAt > SIGNAL_MS) state.pulses.shift();
+      }
+      scene3d?.frame(elapsed / 1000, !reducedMotion && !motionPausedRef.current, neuronState);
+      updateScreenPositions();
+      const nearest = pointerRef.current ? nearestNeuron(screenPositionsRef.current, pointerRef.current) : null;
+      if (nearest !== presentationRef.current.hoveredId) setHoveredId(nearest);
 
-        if (!reducedMotion) {
-          for (let i = state.pulses.length - 1; i >= 0; i -= 1) {
-            const pulse = state.pulses[i];
-            const progress = (timestamp - pulse.startedAt) / 600;
-            if (progress >= 1) {
-              state.pulses.splice(i, 1);
-              continue;
-            }
-            const eased = 1 - (1 - progress) ** 3;
-            context.globalAlpha = (1 - progress) * dim;
-            context.strokeStyle = glowColors[Math.min(4, Math.floor(pulse.strength * 5))];
-            context.lineWidth = 1.5;
-            context.beginPath();
-            context.arc(x, y, (3 + 9 * pulse.strength) * (1 + eased * 0.8), 0, Math.PI * 2);
-            context.stroke();
-          }
+      context.clearRect(0, 0, width, height);
+      const ui = presentationRef.current;
+      for (const [id, point] of screenPositionsRef.current) {
+        const { glow, dim } = neuronState(id);
+        const radius = 4 + 8 * glow;
+        const { x, y } = point;
+        if (!scene3d) {
+          // Flat fallback: draw the neuron itself.
+          const color = glowColors[Math.min(4, Math.floor(glow * 5))];
+          context.globalAlpha = (0.75 + glow * 0.25) * dim;
+          context.fillStyle = color;
+          context.beginPath();
+          context.arc(x, y, radius, 0, Math.PI * 2);
+          context.fill();
         }
-
-        context.globalAlpha = (glow === 0 ? 0.35 : 0.35 + glow * 0.65) * dim;
-        context.fillStyle = color;
-        context.shadowColor = color;
-        context.shadowBlur = glow === 0 ? 0 : 18 * glow;
-        context.beginPath();
-        context.arc(x, y, radius, 0, Math.PI * 2);
-        context.fill();
-        context.shadowBlur = 0;
         context.globalAlpha = dim;
         const clamp = Math.max(-1, Math.min(1, ui.clamps[id] ?? 0));
         if (clamp) ring(x, y, Math.max(10, radius + 4), clamp > 0 ? clampUp : clampDown, 1.5 + 2.5 * Math.abs(clamp));
@@ -326,6 +299,21 @@ function FeatureMapInner({
           ring(x, y, Math.max(19, radius + 12), deepInk, 1.5);
           context.setLineDash([]);
         }
+      }
+      // Region labels draw above every neuron, with a dark halo so they never lose contrast.
+      context.font = `16px ${displayFont}`;
+      context.textAlign = "center";
+      context.lineJoin = "round";
+      for (const anchor of labelAnchors) {
+        const point = projectPoint(anchor.center);
+        if (!point) continue;
+        context.globalAlpha = .85;
+        context.strokeStyle = abyss;
+        context.lineWidth = 5;
+        context.strokeText(anchor.label, point.x, point.y + 5);
+        context.globalAlpha = 1;
+        context.fillStyle = deepInk;
+        context.fillText(anchor.label, point.x, point.y + 5);
       }
       for (let i = pingsRef.current.length - 1; i >= 0; i -= 1) {
         const ping = pingsRef.current[i];
@@ -350,6 +338,7 @@ function FeatureMapInner({
       observer.disconnect();
       unsubscribe();
       reducedMotionQuery.removeEventListener("change", onMotionChange);
+      scene3d?.dispose();
     };
   }, [features, source]);
 
@@ -361,12 +350,8 @@ function FeatureMapInner({
   function pointerMove(event: PointerEvent<HTMLDivElement>) {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    let nearest: string | null = null;
-    let distance = 16;
-    for (const [id, point] of screenPositionsRef.current) {
-      const candidate = Math.hypot(event.clientX - rect.left - point.x, event.clientY - rect.top - point.y);
-      if (candidate < distance) { distance = candidate; nearest = id; }
-    }
+    pointerRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const nearest = nearestNeuron(screenPositionsRef.current, pointerRef.current);
     setHoveredId((previous) => previous === nearest ? previous : nearest);
   }
 
@@ -396,15 +381,15 @@ function FeatureMapInner({
   }
 
   return (
-    <DeepViewport className={className} paused={ambientPaused}>
-      <div className={styles.map} onPointerMove={pointerMove} onPointerLeave={() => setHoveredId(null)}>
+    <DeepViewport className={className} paused={ambientPaused} receded={features.length > 0}>
+      <div className={styles.map} onPointerMove={pointerMove} onPointerLeave={() => { pointerRef.current = null; setHoveredId(null); }}>
         <canvas
           data-feature-map
           ref={canvasRef}
           className={styles.canvas}
           role="img"
           tabIndex={0}
-          aria-label={`Feature map with ${features.length} features. ${tooltipFeature ? `Focused feature: ${tooltipFeature.label}.` : "Dots brighten when a feature activates."}`}
+          aria-label={`Feature map: ${features.length} features shown as neurons in a fish brain. ${tooltipFeature ? `Focused feature: ${tooltipFeature.label}.` : "Neurons brighten when a feature activates."}`}
           aria-describedby={instructionsId}
           onKeyDown={keyDown}
           onFocus={() => setKeyboardId(selection ?? features[0]?.id ?? null)}
@@ -419,7 +404,7 @@ function FeatureMapInner({
             aria-describedby={hoveredId === feature.id ? tooltipId : undefined}
             onClick={() => select(feature.id)} onFocus={() => setKeyboardId(feature.id)} onBlur={() => setKeyboardId(null)} />
         ))}
-        <p id={instructionsId} className={styles.srOnly}>Arrow keys explore · Enter selects</p>
+        <p id={instructionsId} className={styles.srOnly}>Arrow keys explore · Enter selects · Drag to rotate</p>
         {features.length === 0 ? <p className={styles.empty}>Waiting for feature positions…</p> : null}
         {tooltipFeature ? (
           <div ref={tooltipRef} className={styles.tooltip} role="tooltip" id={tooltipId}>

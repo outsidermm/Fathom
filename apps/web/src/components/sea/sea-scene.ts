@@ -8,6 +8,9 @@ export type { SeaScene } from "./sea-renderer";
 // The sand's nearest edge sits at this depth and is projected onto the bottom of the viewport.
 const FLOOR_EDGE_Z = 2.2;
 const FISH_COUNT = 16;
+// Fog density at rest, and when feature positions are drawn over the scene.
+const FOG_CLEAR = .032;
+const FOG_RECEDED = .07;
 
 type Prop = ReturnType<typeof createSeabedObject> & {
   layout: SeabedItem;
@@ -36,7 +39,9 @@ export function createSeaScene(host: HTMLDivElement, layout: SeabedItem[], initi
   const { renderer, canvas, environment, dispose: disposeRenderer } = createSeaRenderer(host, "seaCanvas");
   const palette = readSeaPalette(host);
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(palette.abyss, .032);
+  const fog = new THREE.FogExp2(palette.abyss, FOG_CLEAR);
+  let fogTarget = FOG_CLEAR;
+  scene.fog = fog;
   scene.environment = environment;
   scene.environmentIntensity = .35;
   const camera = new THREE.OrthographicCamera(-10, 10, 6, -6, .1, 60);
@@ -159,6 +164,7 @@ export function createSeaScene(host: HTMLDivElement, layout: SeabedItem[], initi
   function update(delta: number) {
     elapsed += delta;
     causticUniforms.uTime.value = elapsed;
+    fog.density += (fogTarget - fog.density) * (1 - Math.exp(-delta * 3));
     for (const swimmer of fish) {
       if (!swimmer.root.visible) continue;
       if (swimmer.target && !swimmer.target.root.visible) {
@@ -295,6 +301,11 @@ export function createSeaScene(host: HTMLDivElement, layout: SeabedItem[], initi
 
   return {
     setPaused: loop.setPaused,
+    setReceded(receded) {
+      fogTarget = receded ? FOG_RECEDED : FOG_CLEAR;
+      // With motion stopped there is no frame loop to ease it, so jump there.
+      if (!loop.animating()) { fog.density = fogTarget; loop.redraw(); }
+    },
     dispose() {
       loop.stop();
       species.forEach(model => [model.body, model.fins, model.pectoral, model.gill, model.eyeball, model.pupil].forEach(geometry => geometry.dispose()));

@@ -6,7 +6,10 @@
 }
 
 .canvas {
+  /* Positioned so it stacks above the 3D canvas and below the node buttons. */
+  position: relative;
   display: block;
+  cursor: grab;
   width: 100%;
   height: 100%;
 }

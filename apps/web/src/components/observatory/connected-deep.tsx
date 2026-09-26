@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { activationBus, useStreamStore, type ActivationEntry, type FlagEntry, type TokenEntry } from "@/lib/stream-store";
 import type { Feature } from "@/lib/contract";
 import { FeatureMap } from "./feature-map/feature-map";
-import type { MapFeature } from "./feature-map/fake-activation-bus";
+import type { MapFeature, MapFlag } from "./feature-map/fake-activation-bus";
+import { TEST_FEATURES, TEST_RUN_ID, testActivationSource } from "./feature-map/test-feature-layout";
 import { FeatureSearch } from "./feature-search";
 import { DiagnosticsFeed } from "./diagnostics-feed";
 import styles from "./connected-deep.module.css";
@@ -53,7 +54,37 @@ function usePositionedFeatures() {
   return useSyncExternalStore(positions.subscribe, positions.getSnapshot, () => EMPTY_FEATURES);
 }
 
+// `?features=test` swaps in a clustered test layout for frontend design work.
+function useTestLayoutFlag() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => new URLSearchParams(window.location.search).get("features") === "test",
+    () => false,
+  );
+}
+
+function TestFeatureMap({ paused }: { paused: boolean }) {
+  const [flags, setFlags] = useState<readonly MapFlag[]>(EMPTY_FLAGS);
+  useEffect(() => {
+    const unsubscribe = testActivationSource.onFlags(setFlags);
+    if (!paused) testActivationSource.start();
+    return () => { unsubscribe(); testActivationSource.stop(); };
+  }, [paused]);
+  return <div data-coach-target="map" className={styles.host}>
+    <p className={styles.testBadge} role="note">Test layout · {TEST_FEATURES.length} fake positions, not from Qwen</p>
+    <div className={styles.live}>
+      <FeatureMap features={TEST_FEATURES} source={testActivationSource} activeRunId={TEST_RUN_ID}
+        ambientPaused={paused} flags={flags} className="min-h-[350px] rounded-[20px]" />
+    </div>
+  </div>;
+}
+
 export function ConnectedFeatureMap({ paused }: { paused: boolean }) {
+  const testLayout = useTestLayoutFlag();
+  return testLayout ? <TestFeatureMap paused={paused} /> : <LiveFeatureMap paused={paused} />;
+}
+
+function LiveFeatureMap({ paused }: { paused: boolean }) {
   const features = usePositionedFeatures();
   const runId = useStreamStore((state) => state.activeRunId);
   const selected = useStreamStore((state) => state.selectedFeatureId);
@@ -73,7 +104,11 @@ export function ConnectedFeatureMap({ paused }: { paused: boolean }) {
     if (!container || !image || !live) return;
     image.width = live.width;
     image.height = live.height;
-    image.getContext("2d")?.drawImage(live, 0, 0);
+    const snapshot = image.getContext("2d");
+    // The 3D brain renders on its own canvas underneath the 2D overlay.
+    const brain = container.querySelector<HTMLCanvasElement>("canvas[data-brain3d]");
+    if (brain) snapshot?.drawImage(brain, 0, 0, image.width, image.height);
+    snapshot?.drawImage(live, 0, 0);
     function align() {
       if (!container || !image || !live) return;
       const outer = container.getBoundingClientRect();
