@@ -113,7 +113,7 @@ export default function StyleguidePage() {
           </div>
           <div>
             <h3 className={styles.subheading}>PaperNote</h3>
-            <div className={styles.sampleBoxDark}><PaperNote title="Pinned Note" rotate={-1.5}>A warm paper surface for the inspector.</PaperNote></div>
+            <div className={styles.sampleBoxDark}><PaperNote title="Pinned Note">A warm paper surface for the inspector.</PaperNote></div>
           </div>
           <div>
             <h3 className={styles.subheading}>Plank</h3>

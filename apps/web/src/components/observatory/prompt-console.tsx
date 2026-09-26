@@ -34,13 +34,13 @@ export function PromptConsole({ model }: { model: Model }) {
   }, [canRun, start, prompt, model]);
   return (
     <section
-      className="rounded-[20px] bg-sand p-4 shadow-[0_5px_18px_rgb(80_49_32_/_0.1)]"
+      className="surface-panel p-4"
       aria-labelledby="prompt-heading"
     >
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2
           id="prompt-heading"
-          className="font-ui text-base font-bold text-ink"
+          className="surface-title"
         >
           Ask the model
         </h2>
@@ -61,45 +61,45 @@ export function PromptConsole({ model }: { model: Model }) {
         placeholder="e.g. Explain why the sky is blue…"
         className="w-full resize-y rounded-xl border-2 border-crate bg-paper px-3 py-2 font-body text-sm text-driftwood placeholder:text-muted-foreground focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-harbor"
       />
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">Try:</span>
-        {SAMPLES.map((sample) => (
-          <button
-            key={sample}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
             type="button"
-            onClick={() => setPrompt(sample)}
-            className="rounded-full border-2 border-crate bg-sand-light px-3 py-1 font-body text-xs text-ink hover:bg-paper focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-harbor"
+            onClick={() => start(prompt, model)}
+            disabled={!canRun}
+            aria-busy={run?.status === "streaming"}
           >
-            {sample}
-          </button>
-        ))}
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          type="button"
-          onClick={() => start(prompt, model)}
-          disabled={!canRun}
-          aria-busy={run?.status === "streaming"}
-        >
-          <Play aria-hidden />{" "}
-          {run?.status === "streaming" ? "Running…" : "Run"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={stop}
-          disabled={run?.status !== "streaming"}
-        >
-          <Square aria-hidden /> Stop
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={rerun}
-          disabled={connection !== "open" || !run || run.status === "streaming"}
-        >
-          <RotateCcw aria-hidden /> Rerun
-        </Button>
+            <Play aria-hidden />
+            {run?.status === "streaming" ? "Running…" : "Run"}
+          </Button>
+          <Button
+            type="button"
+            onClick={stop}
+            disabled={run?.status !== "streaming"}
+          >
+            <Square aria-hidden /> Stop
+          </Button>
+          <Button
+            type="button"
+            onClick={rerun}
+            disabled={connection !== "open" || !run || run.status === "streaming"}
+          >
+            <RotateCcw aria-hidden /> Rerun
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Try:</span>
+          {SAMPLES.map((sample) => (
+            <button
+              key={sample}
+              type="button"
+              onClick={() => setPrompt(sample)}
+              className="rounded-full border-2 border-crate bg-sand-light px-3 py-1 font-body text-xs text-ink hover:bg-paper focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-harbor"
+            >
+              {sample}
+            </button>
+          ))}
+        </div>
       </div>
       {run?.message && (
         <p role="status" className="mt-3 text-sm text-driftwood">

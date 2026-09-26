@@ -4,11 +4,7 @@ import { useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PaperNote } from "@/components/sea/paper-note";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { MarkdownOutput } from "./markdown-output";
 import { useStreamStore } from "@/lib/stream-store";
 
 export function TokenStream() {
@@ -26,12 +22,10 @@ export function TokenStream() {
         behavior: "smooth",
       });
   }, [run?.tokens.length]);
-  const flags = new Map(run?.flags.map((flag) => [flag.tokenIndex, flag]));
   const tokens = run?.tokens ?? [];
   const position = tokens.findIndex((token) => token.index === hovered);
   return (
     <PaperNote
-      rotate={-0.4}
       className="h-full min-h-48"
       aria-label="Model output"
     >
@@ -73,7 +67,7 @@ export function TokenStream() {
       </div>
       <div
         ref={scroller}
-        className="max-h-64 overflow-y-auto break-words pr-2 font-body text-base leading-relaxed whitespace-pre-wrap"
+        className="max-h-64 overflow-y-auto break-words pr-2 font-body text-base leading-relaxed"
         onPointerEnter={() => {
           paused.current = true;
         }}
@@ -93,34 +87,7 @@ export function TokenStream() {
               : "No output received."}
           </p>
         ) : (
-          run.tokens.map((token) => {
-            const flag = flags.get(token.index);
-            return (
-              <span
-                key={`${run.id}-${token.index}`}
-                onPointerEnter={() => hover(token.index)}
-                className={`motion-safe:animate-[surface_250ms_ease-out_both] ${hovered === token.index ? "bg-water/60" : ""} ${flag ? "decoration-alert underline decoration-2 underline-offset-4" : ""}`}
-              >
-                {token.text}
-                {flag && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="mx-0.5 inline rounded text-alert focus-visible:outline-2 focus-visible:outline-harbor"
-                        aria-label={`Flag: ${flag.signature}, ${Math.round(flag.confidence * 100)} percent`}
-                      >
-                        ⚠
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {flag.signature} · {Math.round(flag.confidence * 100)}%
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </span>
-            );
-          })
+          <MarkdownOutput tokens={run.tokens} flags={run.flags} />
         )}
       </div>
       {run && (

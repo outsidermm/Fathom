@@ -1,5 +1,6 @@
 "use client";
 
+import { PanelEmptyState } from "./panel-empty-state";
 import { Button } from "@/components/ui/button";
 import { STEERING_ENABLED } from "@/lib/contract";
 import { useStreamStore } from "@/lib/stream-store";
@@ -12,11 +13,11 @@ export function ClampTray() {
   const entries = Object.entries(clamps).filter(([, value]) => value !== 0);
   return (
     <section
-      className="rounded-xl bg-sand-light p-3"
+      className="rounded-xl bg-sand-light p-4"
       aria-label="Pending clamps"
     >
-      <div className="flex justify-between gap-2">
-        <h2 className="font-ui text-sm font-bold text-ink">Clamp tray</h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="font-ui text-base font-bold text-ink">Clamp tray</h2>
         {entries.length > 0 && (
           <Button variant="link" size="xs" onClick={reset}>
             Reset all
@@ -44,11 +45,11 @@ export function ClampTray() {
           ))}
         </div>
       ) : (
-        <p className="mt-1 text-xs text-muted-foreground">
+        <PanelEmptyState>
           {STEERING_ENABLED
             ? "No clamps selected."
             : "No clamps. Steering is not connected yet."}
-        </p>
+        </PanelEmptyState>
       )}
     </section>
   );

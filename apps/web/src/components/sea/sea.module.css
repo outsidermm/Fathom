@@ -101,13 +101,6 @@
   background: var(--paper, #f6efec);
   color: var(--driftwood, #503120);
   box-shadow: 0 10px 24px rgb(80 49 32 / 0.18);
-  transform: rotate(var(--note-rotate, 0deg));
-  transform-origin: 50% 12px;
-  transition: transform 180ms cubic-bezier(.2,.8,.2,1);
-}
-
-.paperNote:hover {
-  transform: rotate(0deg) translateY(-2px);
 }
 
 .paperNotePin {
@@ -168,7 +161,4 @@
     animation: none;
   }
 
-  .paperNote {
-    transition: none;
-  }
 }

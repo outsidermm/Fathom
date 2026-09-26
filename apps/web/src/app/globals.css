@@ -149,9 +149,6 @@
   from { transform: translateY(0); }
   to { transform: translateY(-4px); }
 }
-@keyframes sway {
-  to { transform: translateY(-2px) rotate(0); }
-}
 @keyframes press {
   to { transform: translateY(3px); }
 }
@@ -185,12 +182,13 @@
     linear-gradient(180deg, #d69a5a, var(--plank) 40%, var(--plank-dark));
 }
 
-.paper-note {
-  transform: rotate(var(--paper-rotate, 0deg));
-  transition: transform 180ms cubic-bezier(.2, .8, .2, 1);
-}
-.paper-note:hover {
-  transform: translateY(-2px) rotate(0deg);
+@layer components {
+  .surface-panel {
+    @apply rounded-[20px] bg-sand-light/95 text-slate shadow-[0_6px_0_rgb(0_0_0_/_0.06)];
+  }
+  .surface-title {
+    @apply font-display text-3xl leading-none text-ink;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -20,8 +20,8 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Interpretability Observatory",
-  description: "Oracle of the Deep — HackGT 13",
+  title: "Fathom",
+  description: "See what surfaces. Shape what happens next.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
