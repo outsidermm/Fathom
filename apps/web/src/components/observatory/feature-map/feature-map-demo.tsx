@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DiagnosticsFeed } from "@/components/observatory/diagnostics-feed";
+import { FeatureSearch } from "@/components/observatory/feature-search";
 
 import { fakeActivationBus, MOCK_FEATURES, type MapFlag, type MapToken } from "./fake-activation-bus";
 import { FeatureMap } from "./feature-map";
@@ -72,6 +74,7 @@ export function FeatureMapDemo() {
         </span>
       </form>
       <div className={styles.sampleControls}>
+        <FeatureSearch features={MOCK_FEATURES} onSelectFeature={setSelectedId} />
         <p>{selectedFeature ? `Selected: ${selectedFeature.label}` : "Select a dot to try its sample clamp rings."}</p>
         <Button type="button" variant="outline" disabled={!selectedId} onClick={() => setSampleClamp(.8)}>Sample Clamp +0.8</Button>
         <Button type="button" variant="outline" disabled={!selectedId} onClick={() => setSampleClamp(-.6)}>Sample Clamp −0.6</Button>
@@ -96,6 +99,12 @@ export function FeatureMapDemo() {
           </button>;
         }) : <span>Run a sample stream to see tokens here.</span>}
       </div>
+      <section className={styles.diagnostics} aria-labelledby="sample-diagnostics-title">
+        <h3 id="sample-diagnostics-title">Sample Diagnostics</h3>
+        <p>Expand a flag to see its strongest features. Choose one to select its dot on the map.</p>
+        <DiagnosticsFeed activeRunId={runId} flags={flags} tokens={tokens} features={MOCK_FEATURES}
+          source={fakeActivationBus} onSelectFeature={setSelectedId} headingLevel={4} />
+      </section>
     </div>
   );
 }

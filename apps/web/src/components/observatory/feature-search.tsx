@@ -1,146 +1,90 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { activationBus, useStreamStore } from "@/lib/stream-store";
+import * as Dialog from "@radix-ui/react-dialog";
+import { Command, defaultFilter } from "cmdk";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
-function matchScore(text: string, query: string) {
-  if (!query) return 0;
-  const source = text.toLowerCase(),
-    needle = query.toLowerCase();
-  const exact = source.indexOf(needle);
-  if (exact >= 0) return 100 - exact;
-  let at = 0,
-    gaps = 0;
-  for (const letter of needle) {
-    const next = source.indexOf(letter, at);
-    if (next < 0) return -1;
-    gaps += next - at;
-    at = next + 1;
-  }
-  return 50 - gaps;
-}
-export function FeatureSearch() {
+import { Button } from "@/components/ui/button";
+
+import type { MapFeature } from "./feature-map/fake-activation-bus";
+import styles from "./feature-search.module.css";
+
+type SearchFeature = Pick<MapFeature, "id" | "label" | "cluster" | "description">;
+
+export function FeatureSearch({ features, onSelectFeature }: {
+  features: readonly SearchFeature[];
+  onSelectFeature: (id: string | null) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const features = useStreamStore((state) => state.features);
-  const runId = useStreamStore((state) => state.activeRunId);
-  const hasLiveActivations = useStreamStore(
-    (state) => state.hasLiveActivations,
-  );
-  const select = useStreamStore((state) => state.selectFeature);
-  const run = useStreamStore((state) =>
-    state.runs.find((item) => item.id === state.activeRunId),
-  );
-  const ids = useMemo(
-    () =>
-      runId && run?.status !== "streaming"
-        ? [
-            ...new Set(
-              activationBus.forRun(runId).map((entry) => entry.featureId),
-            ),
-          ]
-        : [],
-    [runId, run?.status],
-  );
-  const ready = hasLiveActivations && ids.length > 0;
-  const visibleIds = useMemo(
-    () =>
-      ids
-        .map((id) => ({
-          id,
-          score: matchScore(
-            `${features[id]?.label ?? id} ${features[id]?.cluster ?? ""} ${features[id]?.description ?? ""}`,
-            query,
-          ),
-        }))
-        .filter((item) => item.score >= 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 50)
-        .map((item) => item.id),
-    [ids, features, query],
-  );
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const deferredQuery = useDeferredValue(query);
+  const results = useMemo(() => {
+    const scored = features.map((feature) => ({
+      feature,
+      score: deferredQuery.trim()
+        ? defaultFilter(feature.label, deferredQuery.trim(), [feature.cluster, feature.description ?? "", feature.id])
+        : 1,
+    })).filter((entry) => entry.score > 0);
+    scored.sort((a, b) => b.score - a.score || a.feature.label.localeCompare(b.feature.label));
+    return { total: scored.length, visible: scored.slice(0, 50).map((entry) => entry.feature) };
+  }, [features, deferredQuery]);
+
   useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === "k" &&
-        ready
-      ) {
+    function shortcut(event: globalThis.KeyboardEvent) {
+      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.repeat) {
         event.preventDefault();
-        setOpen((value) => !value);
+        setQuery("");
+        setOpen((previous) => !previous);
       }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [ready]);
+    }
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
+
+  function changeOpen(value: boolean) {
+    setQuery("");
+    setOpen(value);
+  }
+
   return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => setOpen(true)}
-        disabled={!ready}
-        title={
-          !ready
-            ? "Feature search will be available after a run with activation data finishes."
-            : undefined
-        }
-      >
-        <Search aria-hidden /> Search Features{" "}
-        <kbd className="ml-1 font-mono text-xs">⌘K</kbd>
-      </Button>
-      <CommandDialog
-        open={open}
-        onOpenChange={(value) => {
-          setOpen(value);
-          if (!value) setQuery("");
-        }}
-        shouldFilter={false}
-        title="Search Features"
-        description="Search observed features by label, cluster, or description"
-      >
-        <CommandInput
-          name="feature-search"
-          autoComplete="off"
-          value={query}
-          onValueChange={setQuery}
-          placeholder="Search observed features…"
-          aria-label="Search observed features"
-        />
-        <CommandList>
-          <CommandEmpty>No matching observed feature.</CommandEmpty>
-          <CommandGroup heading="Observed Features">
-            {visibleIds.map((id) => {
-              const feature = features[id];
-              return (
-                <CommandItem
-                  key={id}
-                  value={`${feature?.label ?? id} ${feature?.cluster ?? ""} ${feature?.description ?? ""}`}
-                  onSelect={() => {
-                    select(id);
-                    setOpen(false);
-                  }}
-                >
-                  {feature?.label ?? id}
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {feature?.cluster ?? id}
-                  </span>
-                </CommandItem>
-              );
-            })}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
-    </>
+    <div className={styles.root}>
+      <div ref={setPortalContainer} className={styles.portalHost} />
+      <Dialog.Root open={open} onOpenChange={changeOpen}>
+        <Dialog.Trigger asChild>
+          <Button type="button" variant="outline" aria-keyshortcuts="Meta+K Control+K">Search Features <kbd>⌘ / Ctrl K</kbd></Button>
+        </Dialog.Trigger>
+        <Dialog.Portal container={portalContainer ?? undefined}>
+          <Dialog.Overlay className={styles.overlay} />
+          <Dialog.Content className={styles.dialog} onOpenAutoFocus={(event) => { event.preventDefault(); inputRef.current?.focus(); }}>
+            <div className={styles.header}>
+              <Dialog.Title className={styles.title}>Search Features</Dialog.Title>
+              <Dialog.Close asChild><Button type="button" variant="ghost" aria-label="Close feature search">×</Button></Dialog.Close>
+            </div>
+            <Dialog.Description className={styles.description}>Find a feature by label, cluster, or description. Arrow keys explore; Enter selects.</Dialog.Description>
+            <Command label="Feature search results" shouldFilter={false} loop vimBindings={false}>
+              <Command.Input ref={inputRef} className={styles.input} value={query} onValueChange={setQuery}
+                aria-label="Search labels, clusters, or descriptions" name="feature-search" autoComplete="off"
+                placeholder="Search labels, clusters, or descriptions…" />
+              <Command.List className={styles.list} aria-busy={query !== deferredQuery}>
+                <Command.Empty className={styles.empty}>{features.length ? "No matching features. Try another label or cluster." : "Feature definitions have not arrived yet."}</Command.Empty>
+                {results.visible.map((feature) => (
+                  <Command.Item key={feature.id} value={feature.id} asChild className={styles.item}
+                    onSelect={() => { onSelectFeature(feature.id); changeOpen(false); }}>
+                    <button type="button">
+                      <span className={styles.itemTop}><strong>{feature.label}</strong><span className={styles.cluster}>{feature.cluster}</span></span>
+                      <span className={styles.itemDescription}>{feature.description || "No description provided."}</span>
+                      <span className={styles.id}>{feature.id}</span>
+                    </button>
+                  </Command.Item>
+                ))}
+              </Command.List>
+            </Command>
+            <p className={styles.footer} role="status">{results.total > 50 ? `Showing 50 of ${results.total} matches. Type more to narrow the list.` : `${results.total} ${results.total === 1 ? "feature" : "features"} found`} · Esc closes</p>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </div>
   );
 }

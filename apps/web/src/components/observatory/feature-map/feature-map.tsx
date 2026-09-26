@@ -75,6 +75,10 @@ function FeatureMapInner({
   useEffect(() => {
     processedFlagsRef.current.clear();
     pingsRef.current = [];
+    for (const state of nodeStatesRef.current.values()) {
+      state.glow = 0;
+      state.pulses.length = 0;
+    }
   }, [activeRunId]);
 
   useEffect(() => {

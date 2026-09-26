@@ -4,12 +4,14 @@ export interface MapActivation {
   featureId: string;
   value: number;
   coords: { x: number; y: number; z?: number };
+  explanation?: string;
 }
 
 export interface MapFeature {
   id: string;
   label: string;
   cluster: string;
+  description?: string;
   coords: { x: number; y: number; z?: number };
 }
 
@@ -31,6 +33,21 @@ export interface ActivationSource {
 }
 
 // Coordinates match the 12 stable positions in apps/api/app/mock_stream.py.
+const MOCK_DESCRIPTIONS = [
+  "Softening phrases: might, could, it seems",
+  "Declining or deflecting the request",
+  "Asserting a fact with no grounding in context",
+  "Formal or legal phrasing",
+  "Positive, upbeat framing",
+  "Arithmetic or quantitative steps",
+  "Programming-language tokens",
+  "I think, I believe",
+  "Explicit confidence hedging",
+  "Person, place, or organization reference",
+  "I’m sorry, but…",
+  "A source-like reference with no backing",
+];
+
 export const MOCK_FEATURES: MapFeature[] = [
   { id: "feat_0001", label: "hedging language", cluster: "hedging", coords: { x: -14.625, y: 13.897 } },
   { id: "feat_0002", label: "refusal pattern", cluster: "refusal", coords: { x: 18.241, y: 17.913 } },
@@ -44,7 +61,7 @@ export const MOCK_FEATURES: MapFeature[] = [
   { id: "feat_0010", label: "named entity", cluster: "reasoning", coords: { x: 2.856, y: -2.844 } },
   { id: "feat_0011", label: "apology pattern", cluster: "refusal", coords: { x: -1.905, y: 2.391 } },
   { id: "feat_0012", label: "fabricated citation", cluster: "unsupported", coords: { x: -1.017, y: 6.299 } },
-];
+].map((feature, index) => ({ ...feature, description: MOCK_DESCRIPTIONS[index] }));
 
 const subscribers = new Set<(batch: MapActivation[]) => void>();
 const history = new Map<string, MapActivation[]>();
@@ -86,6 +103,8 @@ export const fakeActivationBus: ActivationSource & {
     const runId = crypto.randomUUID();
     activeRunId = runId;
     history.set(runId, []);
+    // Keep the local preview bounded across repeated runs.
+    while (history.size > 8) history.delete(history.keys().next().value!);
     const words = [...prompt.trim().split(/\s+/), ..."The model considers several possibilities before choosing an answer".split(" ")];
     let tokenIndex = 0;
     intervalId = setInterval(() => {
