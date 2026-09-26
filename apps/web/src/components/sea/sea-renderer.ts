@@ -56,6 +56,8 @@ export function createSeaRenderer(host: HTMLElement, dataset: string) {
 
 export interface SeaScene {
   setPaused(paused: boolean): void;
+  /** Pushes the scene back (fog) so data drawn over it reads first. */
+  setReceded?(receded: boolean): void;
   dispose(): void;
 }
 
@@ -117,6 +119,8 @@ export function runSeaLoop(host: HTMLElement, canvas: HTMLCanvasElement, initial
   syncMotion();
 
   return {
+    animating: canAnimate,
+    redraw: render,
     setPaused(value: boolean) { paused = value; syncMotion(); },
     stop() {
       disposed = true;
