@@ -167,9 +167,71 @@ ssh -N -o ExitOnForwardFailure=yes -i ~/.ssh/hackgt_runpod \
 ```
 
 The local FastAPI process calls `AV_API_BASE=http://127.0.0.1:30003` by default. Both
-Pod services are bound to loopback; the browser receives only AV text via
-FastAPI's `av` WebSocket event. If AV fails, it receives `av_error` and the
-Qwen answer is retained.
+Pod services are bound to loopback; the browser receives checkpoint-linked AV
+text via FastAPI's `av` WebSocket events, interleaved with Qwen output when AV
+finishes early enough. If AV fails, it receives `av_error` and the Qwen answer
+is retained. The Pod sidecar serializes only the short replay forward pass; AV
+generation runs concurrently so the AV SGLang server can batch checkpoints.
+`AV_MAX_TOKENS` (default 96) caps each explanation; a truncated decode is cut
+back to its last full sentence. `start_services.sh` starts the sidecar before
+the AV server, then launches AV with CUDA graphs (`--mem-fraction-static 0.60`
+of the ~31 GB then free, `--cuda-graph-max-bs 8`): a reading took ~1.5 s
+instead of ~2.0 s with identical output, and three concurrent ones 1.8-2.4 s.
+The A100 then sits at about 71 of 80 GB. The sidecar loads its models at startup (a
+minute or more), and `/health` answers only afterwards.
+
+In a live probe, a short car-budget prefix returned an on-topic AV explanation
+in about 2.8 seconds, but the AV also fabricated a quotation. Interpretations
+remain experimental and should not be treated as verified descriptions of the
+model's reasoning. A separate tool-use probe showed that this SGLang launch
+returns Qwen's `<tool_call>` markup as ordinary content without a tool parser.
+Qwen called a simple calculator when directly asked, but ignored a request to
+call `checkpoint_section` after each of three answer steps. Model-chosen
+checkpoint calls are therefore not the only scheduling mechanism in this build.
+In a full WebSocket run with a three-step used-car answer, the first AV event
+arrived at 4.49 seconds, before Qwen's last text at 5.12 seconds. The second
+arrived at 7.3 seconds; step 2 was replaced in the bounded queue. The step-3
+AV text discussed inspection instead of the paperwork section and again
+fabricated a quotation. This proves concurrent delivery, not interpretive
+quality. Do not present these AV texts as reliable or enable steering from
+them without further validation.
+
+After the sidecar change (replay under the lock only, 96-token cap), warm
+measurements on the A100 were: replay forward about 31 ms, AV decode about
+20 ms per token (about 2.0 s at 96 tokens), and three concurrent requests in
+2.9–3.0 s of wall time instead of about 6 s. In three paced WebSocket runs of a
+three-step used-car answer, every step received its reading and none was
+dropped; runs finished in 3.7–4.8 s. The same prompt unpaced finished Qwen's
+text in 2.4–3.2 s and dropped all three readings, so pacing is what makes
+mid-stream readings visible at all. A sampling study over five prompts
+(15 checkpoints) found no advantage in sampling a step's heading or midpoint
+over its sentence end: each matched its own section's keywords better than
+the next section's in 14–15 of 15 cases. Every reading, whatever the sampling
+point, opened with a genre-level sentence ("structured article format with
+numbered steps") and often added invented specifics (a Honda, a visa
+interview). The UI therefore leads with the detail sentence; nothing in the
+pipeline verifies it.
+
+## Production: expose Qwen and the sidecar through Runpod's proxy
+
+For a deployed FastAPI (for example on Vercel), the Pod must be reachable
+without SSH:
+
+1. In the Runpod console, edit the Pod and set **Expose HTTP Ports** to
+   `30001,30003`. Editing restarts the Pod and resets its container disk
+   (`/root`); `/workspace` survives.
+2. From the Pod's web terminal (or SSH on the new port), run
+   `bash /workspace/hackgt/pod/start_services.sh`. It rebuilds the two
+   environments if they are missing (about 10 minutes), then starts Qwen
+   and the sidecar on `0.0.0.0` with keys and AV on loopback, and prints
+   each service once it answers.
+3. Keys live in `/workspace/hackgt/secrets.env` (generated once). The network
+   volume ignores file permissions, so treat the volume as secret-bearing.
+
+The public URLs are `https://<POD_ID>-30001.proxy.runpod.net/v1` and
+`https://<POD_ID>-30003.proxy.runpod.net`. Qwen rejects requests without
+`Authorization: Bearer $QWEN_API_KEY`; the sidecar requires
+`Bearer $AV_API_KEY` on everything except `/health`.
 
 Do not run the older `/workspace/hackgt_setup.sh` script while Qwen is live:
 it stops the existing SGLang process and starts a standalone AV experiment on
