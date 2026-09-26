@@ -47,14 +47,23 @@ clamps.
 // A generated Qwen text delta, in order (may be a partial word)
 { "type": "token", "index": 0, "text": "The", "position": 0 }
 
-// The NLA AV interpretation of Qwen's block-20 residual after the last
-// answer token containing text (skipping trailing punctuation when possible).
-// This arrives after the text stream and before status:done.
-// It describes one activation approximately; it is not literal thoughts.
-{ "type": "av", "explanation": "...", "layer": 20, "sample": "replayed_last_content_token" }
+// One checkpoint interpretation, sent after the text up to `position` (a
+// character offset in the displayed answer, not a token index) and before any
+// text from `position` on: it describes the state just before that text.
+// Show `focus`, a 3-7 word "-ing" label ("advising to set a budget") that
+// Qwen writes from the AV's `detail` alone (never from the answer text); keep
+// `detail` one click away. `focus` is null when it could not be made or the
+// note had no detail; the `genre` opener is mostly the AV's prior and often wrong.
+// It describes one replayed activation approximately, not literal thoughts.
+{ "type": "av", "explanation": "...", "genre": "...", "detail": "...",
+  "focus": "advising to determine a budget",
+  "layer": 20, "sample": "replayed_last_content_token",
+  "checkpoint_id": 0, "position": 95, "label": "Step 1",
+  "replay_ms": 40, "av_ms": 2100 }
 
 // AV failed; the Qwen answer remains valid and status:done still follows.
-{ "type": "av_error", "message": "AV unavailable: ..." }
+{ "type": "av_error", "message": "AV unavailable: ...", "checkpoint_id": 0,
+  "position": 95, "label": "Step 1" }
 
 // Planned only: not emitted by the current backend.
 // token_index ties it back to the "token" event above.
