@@ -1,0 +1,18 @@
+# Python
+apps/api/.venv/
+apps/api/__pycache__/
+apps/api/**/__pycache__/
+apps/api/*.egg-info/
+apps/api/.pytest_cache/
+
+# env
+.env
+apps/api/.env
+apps/web/.env*.local
+
+# OS
+.DS_Store
+
+# editors
+.vscode/
+.idea/
