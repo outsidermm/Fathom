@@ -79,13 +79,25 @@ class FlagEvent(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
+class AVEvent(BaseModel):
+    type: Literal["av"] = "av"
+    explanation: str
+    layer: Literal[20] = 20
+    sample: Literal["replayed_last_content_token"] = "replayed_last_content_token"
+
+
+class AVErrorEvent(BaseModel):
+    type: Literal["av_error"] = "av_error"
+    message: str
+
+
 class StatusEvent(BaseModel):
     type: Literal["status"] = "status"
     state: StreamState
     message: Optional[str] = None
 
 
-ServerMessage = Union[TokenEvent, ActivationEvent, FlagEvent, StatusEvent]
+ServerMessage = Union[TokenEvent, ActivationEvent, FlagEvent, AVEvent, AVErrorEvent, StatusEvent]
 
 
 # ---- REST -------------------------------------------------------------------

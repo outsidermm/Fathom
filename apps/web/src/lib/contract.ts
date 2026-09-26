@@ -39,6 +39,8 @@ export type ServerMessage =
       signature: Signature;
       confidence: number;
     }
+  | { type: "av"; explanation: string; layer: 20; sample: "replayed_last_content_token" }
+  | { type: "av_error"; message: string }
   | { type: "status"; state: StreamState; message?: string };
 
 // ---- REST ---------------------------------------------------------------

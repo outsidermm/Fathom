@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 
 import httpx
 
-from .schemas import StatusEvent, TokenEvent
+from .schemas import AVErrorEvent, AVEvent, StatusEvent, TokenEvent
 
 SendEvent = Callable[[dict], Awaitable[None]]
 
@@ -74,11 +74,16 @@ def _content_delta(payload: str) -> str:
 
 
 async def run_qwen_stream(
-    prompt: str, send: SendEvent, *, client: httpx.AsyncClient | None = None
+    prompt: str,
+    send: SendEvent,
+    *,
+    client: httpx.AsyncClient | None = None,
+    av_client: httpx.AsyncClient | None = None,
 ) -> None:
     """Bridge live Qwen chunks to the existing frontend WebSocket shape."""
     index = 0
     position = 0
+    answer: list[str] = []
     try:
         async for delta in qwen_deltas(prompt, client=client):
             if not delta:
@@ -86,10 +91,13 @@ async def run_qwen_stream(
             if index == 0:
                 await send(StatusEvent(state="streaming").model_dump())
             await send(TokenEvent(index=index, text=delta, position=position).model_dump())
+            answer.append(delta)
             index += 1
             position += len(delta)
         if index == 0:
             await send(StatusEvent(state="streaming").model_dump())
+        else:
+            await _send_av(prompt, "".join(answer), send, client=av_client)
         await send(StatusEvent(state="done").model_dump())
     except httpx.HTTPStatusError as exc:
         await send(
@@ -101,3 +109,32 @@ async def run_qwen_stream(
         await send(
             StatusEvent(state="error", message=f"Qwen stream unavailable: {type(exc).__name__}").model_dump()
         )
+
+
+async def _send_av(
+    prompt: str,
+    answer: str,
+    send: SendEvent,
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> None:
+    """Describe a real Qwen block-20 state after the target text has streamed."""
+    url = os.environ.get("AV_API_BASE", "http://127.0.0.1:30003").rstrip("/")
+    owns_client = client is None
+    if client is None:
+        client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
+        )
+    try:
+        response = await client.post(f"{url}/explain", json={"prompt": prompt, "answer": answer})
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ValueError("AV returned an invalid response")
+        event = AVEvent.model_validate({"type": "av", **payload})
+        await send(event.model_dump())
+    except (httpx.HTTPError, ValueError) as exc:
+        await send(AVErrorEvent(message=f"AV unavailable: {type(exc).__name__}").model_dump())
+    finally:
+        if owns_client:
+            await client.aclose()

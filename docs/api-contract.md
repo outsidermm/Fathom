@@ -2,9 +2,10 @@
 
 This is the shared source of truth so `apps/web` (Samuel, Hari) and `apps/api`
 (Kareem, James) can build in parallel without waiting on each other. The API
-currently streams **live Qwen text** in this event shape. Activation events,
-flags, and steering are planned; `/api/features` still returns placeholder
-data. The frontend should not present those placeholders as model internals.
+currently streams **live Qwen text** and one NLA AV interpretation after the
+answer. Activation-map events, flags, and steering are planned; `/api/features`
+still returns placeholder data. The frontend should not present those
+placeholders as model internals.
 
 If you change a shape here, update both `apps/api/app/schemas.py` (Pydantic)
 and `apps/web/src/lib/contract.ts` (TypeScript) in the same commit.
@@ -43,6 +44,15 @@ clamps.
 ```jsonc
 // A generated Qwen text delta, in order (may be a partial word)
 { "type": "token", "index": 0, "text": "The", "position": 0 }
+
+// The NLA AV interpretation of Qwen's block-20 residual after the last
+// answer token containing text (skipping trailing punctuation when possible).
+// This arrives after the text stream and before status:done.
+// It describes one activation approximately; it is not literal thoughts.
+{ "type": "av", "explanation": "...", "layer": 20, "sample": "replayed_last_content_token" }
+
+// AV failed; the Qwen answer remains valid and status:done still follows.
+{ "type": "av_error", "message": "AV unavailable: ..." }
 
 // Planned only: not emitted by the current backend.
 // token_index ties it back to the "token" event above.
@@ -87,10 +97,9 @@ clamps.
   hedging/refusal/unsupported feature signatures early since the frontend
   needs a way to visually distinguish them. See `docs/design-system.md` §3
   for the `--alert` token and the map's color rules.
-- If NLA wins over SAE: add an optional `explanation: string` on `activation`
-  events for the AV-generated natural-language description. The frontend's
-  `feature-inspector.tsx` (see `docs/frontend-roadmap.md`) already renders
-  it when present.
+- The current `av` event is one end-of-answer sample. Per-token activation
+  maps and steerable directions still require target-model hooks and a
+  separate implementation.
 
 ## Open asks for whoever owns the real backend (from the 11 PM sync)
 
