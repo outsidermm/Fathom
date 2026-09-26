@@ -1,0 +1,485 @@
+/* The ocean as a steering surface: readings as bubbles on a current. */
+
+.viewport {
+  position: absolute;
+  inset: 0;
+}
+
+.stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--deep-ink) 25%, transparent) transparent;
+}
+
+.content {
+  position: relative;
+  width: 100%;
+}
+
+.threads {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.thread {
+  fill: none;
+  stroke: color-mix(in srgb, var(--glow-3) 75%, transparent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  animation: threadIn 700ms ease-out both;
+}
+.threadAhead {
+  stroke: var(--glow-4);
+  stroke-dasharray: 3 7;
+  animation: threadFlow 1.2s linear infinite;
+}
+.threadOld { stroke: color-mix(in srgb, var(--glow-2) 80%, transparent); }
+.threadFork { stroke: var(--glow-5); stroke-width: 2.5; }
+.link {
+  fill: none;
+  stroke: color-mix(in srgb, var(--glow-5) 55%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 6;
+  stroke-linecap: round;
+  animation: threadIn 400ms ease-out both, threadFlow 1.6s linear infinite;
+}
+
+@keyframes threadIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes threadFlow { to { stroke-dashoffset: -20; } }
+
+.nodes {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each slot eases to its place when the current reflows. */
+.slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(calc(var(--x) - 50%), calc(var(--y) - 22px));
+  transition: transform 700ms cubic-bezier(.2, .9, .3, 1);
+}
+
+.node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 150px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--deep-ink);
+  cursor: pointer;
+  text-align: center;
+  animation: rise 900ms cubic-bezier(.2, 1.3, .4, 1) both;
+  transition: opacity 300ms ease;
+}
+.node:focus-visible { outline: none; }
+.node:focus-visible .label { outline: 2px solid var(--deep-ink); outline-offset: 3px; }
+.dimmed { opacity: .5; }
+.dimmed:hover, .dimmed:focus-visible { opacity: 1; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(140px) scale(.4); }
+  to { opacity: 1; transform: none; }
+}
+
+.bob {
+  display: contents;
+}
+.orbBox {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  animation: bob 3.2s ease-in-out infinite alternate;
+  animation-delay: calc(var(--delay) * -1);
+}
+@keyframes bob {
+  from { transform: translateY(3px); }
+  to { transform: translateY(-5px); }
+}
+
+/* A glassy bubble: highlight up-left, glow ramp inside. */
+.orb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 30%, rgb(255 255 255 / .85) 0 12%, transparent 30%),
+    radial-gradient(circle at 50% 55%, var(--glow-4), var(--glow-2) 75%);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--glow-4) 55%, transparent), inset 0 0 0 1px rgb(255 255 255 / .35);
+  transition: width 400ms ease, height 400ms ease, box-shadow 400ms ease;
+}
+.upcoming .orb {
+  width: 34px;
+  height: 34px;
+  background:
+    radial-gradient(circle at 34% 30%, rgb(255 255 255 / .9) 0 12%, transparent 30%),
+    radial-gradient(circle at 50% 55%, var(--glow-5), var(--glow-3) 75%);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--glow-5) 70%, transparent), inset 0 0 0 1px rgb(255 255 255 / .5);
+}
+.upcoming .orbBox::after {
+  position: absolute;
+  inset: 5px;
+  border: 2px solid var(--glow-5);
+  border-radius: 50%;
+  content: "";
+  animation: ping 1.8s ease-out infinite;
+}
+.current .orb { width: 26px; height: 26px; }
+.past .orb { width: 18px; height: 18px; opacity: .85; }
+.unreached .orb { width: 18px; height: 18px; opacity: .5; box-shadow: none; }
+.unreached .label { color: color-mix(in srgb, var(--deep-ink) 70%, transparent); font-weight: 500; }
+.ancestor .orb {
+  width: 14px;
+  height: 14px;
+  background: radial-gradient(circle at 34% 30%, rgb(255 255 255 / .6) 0 12%, transparent 30%), var(--glow-2);
+  box-shadow: none;
+}
+.open .orb, .lit .orb { box-shadow: 0 0 0 3px var(--abyss), 0 0 0 5px var(--glow-5), 0 0 24px var(--glow-4); }
+.error .orb {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--deep-ink) 50%, transparent);
+}
+.steering .orb { animation: pulse 1s ease-in-out infinite alternate; }
+.forming .orb {
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  box-shadow: none;
+  border: 2px dashed color-mix(in srgb, var(--glow-4) 80%, transparent);
+  animation: spin 3s linear infinite;
+}
+@keyframes spin { to { transform: rotate(1turn); } }
+
+.badge {
+  position: absolute;
+  top: -2px;
+  right: -12px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 10px/1.4 var(--font-ui);
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 150px;
+  margin-top: 4px;
+  padding: 5px 9px 6px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--abyss) 62%, transparent);
+  backdrop-filter: blur(3px);
+  font: 600 13px/1.25 var(--font-ui);
+  transition: border-color 200ms ease, background 200ms ease;
+}
+.node:hover .label, .lit .label { background: color-mix(in srgb, var(--abyss) 80%, transparent); }
+.open .label { border-color: color-mix(in srgb, var(--glow-5) 70%, transparent); background: color-mix(in srgb, var(--abyss) 85%, transparent); }
+.upcoming .label { font-size: 14px; }
+.ancestor .label, .past .label { font-weight: 500; }
+.ancestor .label { color: color-mix(in srgb, var(--deep-ink) 80%, transparent); }
+.step {
+  color: var(--glow-5);
+  font: 500 10px/1.3 var(--font-mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.fork {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--glow-5);
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* The rest of the path a steer branched away from. */
+/* Sits above the fork bubble, in the gap between rows. */
+.ghost {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  border: 1px dashed color-mix(in srgb, var(--deep-ink) 35%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--abyss) 55%, transparent);
+  color: color-mix(in srgb, var(--deep-ink) 75%, transparent);
+  cursor: pointer;
+  font: 500 11px/1.3 var(--font-ui);
+  animation: threadIn 500ms ease-out both;
+}
+.ghost:hover { color: var(--deep-ink); border-color: color-mix(in srgb, var(--deep-ink) 60%, transparent); }
+.ghost:focus-visible { outline: 2px solid var(--deep-ink); outline-offset: 2px; }
+.ghostDots { display: flex; gap: 3px; }
+.ghostDots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--glow-2) 70%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--deep-ink) 25%, transparent);
+}
+.slot { display: flex; flex-direction: column; align-items: center; }
+
+/* The steering dock: the open bubble's directions, then its reading. */
+.dock {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.sheetHint {
+  position: absolute;
+  z-index: 4;
+  bottom: 12px;
+  left: 50%;
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--abyss) 75%, transparent);
+  color: var(--deep-ink);
+  font: 600 12px var(--font-ui);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.sheetClose {
+  flex: none;
+  align-self: flex-end;
+  padding: 6px 14px;
+  border: 1px solid color-mix(in srgb, var(--deep-ink) 30%, transparent);
+  border-radius: 999px;
+  background: var(--abyss);
+  color: var(--deep-ink);
+  cursor: pointer;
+  font: 600 12px var(--font-ui);
+}
+.sheetClose:focus-visible { outline: 2px solid var(--deep-ink); outline-offset: 2px; }
+.dockHint {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--abyss) 70%, transparent);
+  color: color-mix(in srgb, var(--deep-ink) 85%, transparent);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.column {
+  flex: none;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--deep-ink) 16%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--abyss) 80%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 14px 30px rgb(0 0 0 / .3);
+  animation: settle 300ms ease-out both;
+}
+.columnPinned { border-color: color-mix(in srgb, var(--glow-5) 40%, transparent); }
+.column:disabled .buds, .column:disabled .own { opacity: .6; }
+.columnTitle {
+  float: left;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 0;
+  color: var(--deep-ink);
+  font: 700 13px/1.3 var(--font-ui);
+}
+.columnTitle span {
+  display: block;
+  color: color-mix(in srgb, var(--deep-ink) 72%, transparent);
+  font-size: 11px;
+  font-weight: 500;
+}
+.buds {
+  clear: both;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Suggestions are hollow and dashed: not readings, and they look it. */
+.bud {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1.5px dashed color-mix(in srgb, var(--deep-ink) 50%, transparent);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--paper) 7%, transparent);
+  color: var(--deep-ink);
+  cursor: pointer;
+  font: 600 13px/1.25 var(--font-ui);
+  text-align: left;
+  animation: bud 450ms cubic-bezier(.2, 1.3, .4, 1) both;
+  animation-delay: calc(var(--i) * 70ms);
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+.bud:hover:not(:disabled) {
+  border-color: var(--glow-5);
+  background: color-mix(in srgb, var(--glow-3) 22%, transparent);
+  transform: translateX(3px);
+}
+.bud:focus-visible, .own input:focus-visible, .own button:focus-visible, .sample:focus-visible {
+  outline: 2px solid var(--deep-ink);
+  outline-offset: 2px;
+}
+.budDot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1.5px dashed var(--glow-4);
+  border-radius: 50%;
+}
+.chosen { border-style: solid; border-color: var(--glow-5); background: color-mix(in srgb, var(--glow-3) 35%, transparent); }
+.chosen .budDot { border-style: solid; background: var(--glow-5); }
+@keyframes bud {
+  from { opacity: 0; transform: translateX(-14px) scale(.7); }
+  to { opacity: 1; transform: none; }
+}
+.waiting {
+  margin: 0;
+  padding: 10px 2px;
+  color: color-mix(in srgb, var(--deep-ink) 75%, transparent);
+  font-size: 13px;
+}
+.own {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.own input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--deep-ink) 35%, transparent);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--abyss) 70%, transparent);
+  color: var(--deep-ink);
+  font: 500 13px var(--font-body);
+}
+.own input::placeholder { color: color-mix(in srgb, var(--deep-ink) 65%, transparent); }
+.own button {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--glow-4);
+  color: var(--abyss);
+  cursor: pointer;
+  font: 700 16px var(--font-ui);
+}
+.own button:disabled { background: color-mix(in srgb, var(--deep-ink) 20%, transparent); color: color-mix(in srgb, var(--deep-ink) 60%, transparent); cursor: default; }
+.columnStatus {
+  margin: 4px 2px 0;
+  color: var(--glow-5);
+  font-size: 12px;
+}
+.columnStatus:empty { display: none; }
+
+/* Before the first prompt. */
+.idle {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 90px 24px 40px;
+  background: radial-gradient(ellipse 60% 42% at 50% 55%, color-mix(in srgb, var(--abyss) 70%, transparent), transparent 75%);
+  text-align: center;
+}
+.idleTitle {
+  margin: 0;
+  color: var(--deep-ink);
+  font: 400 clamp(28px, 3.4vw, 42px)/1.1 var(--font-display);
+  text-shadow: 0 2px 16px var(--abyss);
+}
+.idleBody {
+  max-width: 34rem;
+  margin: 0;
+  color: color-mix(in srgb, var(--deep-ink) 88%, transparent);
+  font-size: 15px;
+  line-height: 1.5;
+  text-shadow: 0 1px 8px var(--abyss);
+}
+.samples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.sample {
+  padding: 10px 16px;
+  border: 1.5px solid color-mix(in srgb, var(--glow-5) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--abyss) 55%, transparent);
+  backdrop-filter: blur(3px);
+  color: var(--deep-ink);
+  cursor: pointer;
+  font: 600 14px var(--font-ui);
+  animation: bob 3s ease-in-out infinite alternate;
+}
+.sample:nth-child(2) { animation-delay: -1s; }
+.sample:nth-child(3) { animation-delay: -2s; }
+.sample:hover:not(:disabled) { background: color-mix(in srgb, var(--glow-2) 60%, transparent); }
+.sample:disabled { opacity: .6; cursor: default; }
+
+@media (prefers-reduced-motion: reduce) {
+  .orbBox, .sample, .threadAhead, .upcoming .orbBox::after, .forming .orb { animation: none; }
+  .slot { transition: none; }
+}
+
+/* Local copies: module keyframe names are scoped to this file. */
+@keyframes ping {
+  from { transform: scale(1); opacity: .9; }
+  to { transform: scale(2.2); opacity: 0; }
+}
+@keyframes pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.25); }
+}
+@keyframes settle {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Pause Motion freezes animations mid-frame; entrances would stay invisible,
+   so they are skipped outright while paused. */
+:global(.motion-paused) .node,
+:global(.motion-paused) .column,
+:global(.motion-paused) .bud,
+:global(.motion-paused) .thread,
+:global(.motion-paused) .link,
+:global(.motion-paused) .ghost {
+  animation: none !important;
+}
