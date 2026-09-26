@@ -1,18 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { activationBus, useStreamStore, type ActivationEntry, type FlagEntry, type TokenEntry } from "@/lib/stream-store";
+import { activationBus, useStreamStore, type ActivationEntry, type FlagEntry } from "@/lib/stream-store";
 import { MODEL_LABELS, type Feature, type Model } from "@/lib/contract";
 import { FeatureMap } from "./feature-map/feature-map";
 import type { MapFeature, MapFlag } from "./feature-map/fake-activation-bus";
 import { TEST_FEATURES, TEST_RUN_ID, testActivationSource } from "./feature-map/test-feature-layout";
-import { FeatureSearch } from "./feature-search";
-import { DiagnosticsFeed } from "./diagnostics-feed";
 import styles from "./connected-deep.module.css";
 
 const EMPTY_FEATURES: readonly MapFeature[] = [];
 const EMPTY_FLAGS: readonly FlagEntry[] = [];
-const EMPTY_TOKENS: readonly TokenEntry[] = [];
 
 // The current dictionary has labels but no coordinates. Only place nodes
 // when their coordinates actually arrive from the live activation bus.
@@ -87,10 +84,6 @@ export function ConnectedFeatureMap({ paused, model }: { paused: boolean; model:
 function LiveFeatureMap({ paused, model }: { paused: boolean; model: Model }) {
   const features = usePositionedFeatures();
   const runId = useStreamStore((state) => state.activeRunId);
-  const selected = useStreamStore((state) => state.selectedFeatureId);
-  const select = useStreamStore((state) => state.selectFeature);
-  const clamps = useStreamStore((state) => state.clamps);
-  const hoveredToken = useStreamStore((state) => state.hoveredTokenIndex);
   const flags = useStreamStore((state) => state.runs.find((run) => run.id === state.activeRunId)?.flags ?? EMPTY_FLAGS);
   const host = useRef<HTMLDivElement>(null);
   const frozen = useRef<HTMLCanvasElement>(null);
@@ -127,28 +120,9 @@ function LiveFeatureMap({ paused, model }: { paused: boolean; model: Model }) {
   return <div ref={host} data-coach-target="map" className={`${styles.host} ${paused ? styles.paused : ""}`}>
     <div data-live-map inert={paused} className={styles.live}>
       <FeatureMap features={features} source={activationBus} activeRunId={runId} ambientPaused={paused} modelLabel={MODEL_LABELS[model]}
-        selectedFeatureId={selected} onSelectFeature={select} clamps={clamps}
-        hoveredTokenIndex={hoveredToken} flags={flags} className="min-h-[350px] rounded-[20px]" />
+        flags={flags} className="min-h-[350px] rounded-[20px]" />
     </div>
     {paused ? <><canvas ref={frozen} className={styles.frozen} aria-hidden="true" />
       <p className={styles.notice} role="status">Map paused. Resume Motion to explore features.</p></> : null}
   </div>;
-}
-
-export function ConnectedFeatureSearch() {
-  const definitions = useStreamStore((state) => state.features);
-  const select = useStreamStore((state) => state.selectFeature);
-  const features = useMemo(() => Object.values(definitions), [definitions]);
-  return <FeatureSearch features={features} onSelectFeature={select} />;
-}
-
-export function ConnectedDiagnosticsFeed() {
-  const features = usePositionedFeatures();
-  const run = useStreamStore((state) => state.runs.find((item) => item.id === state.activeRunId));
-  const select = useStreamStore((state) => state.selectFeature);
-  return <section className="rounded-xl bg-sand-light p-4" aria-labelledby="diagnostics-title">
-    <h2 id="diagnostics-title" className="mb-3 font-ui text-base font-bold text-ink">Diagnostics</h2>
-    <DiagnosticsFeed activeRunId={run?.id ?? null} flags={run?.flags ?? EMPTY_FLAGS}
-      tokens={run?.tokens ?? EMPTY_TOKENS} features={features} source={activationBus} onSelectFeature={select} />
-  </section>;
 }
