@@ -402,7 +402,7 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
     const run = get().runs.find((item) => item.id === get().activeRunId);
     const trimmed = direction.trim();
     if (!run || !trimmed) return false;
-    const guidedPrompt = `The user asked: ${run.rootPrompt}\n\nThey now want a new answer that prioritizes this direction: ${trimmed}\nStart by addressing that direction directly. Keep other parts of the original request only where they support it.`;
+    const guidedPrompt = `Latest user direction (highest priority): ${trimmed}\n\nEarlier task: ${run.rootPrompt}\n\nWrite a fresh answer. The first sentence and first section must directly address the latest direction. Do not start with an outline of the earlier task. Integrate the earlier task only where it helps answer the latest direction.`;
     if (guidedPrompt.length > 16000) return false;
     get().start(guidedPrompt, run.model, {
       rootPrompt: run.rootPrompt,

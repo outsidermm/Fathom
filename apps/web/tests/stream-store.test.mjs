@@ -119,7 +119,7 @@ test('a suggested direction starts a fresh guided answer and keeps the original 
   assert.notEqual(state().activeRunId, firstId);
   sockets[1].open();
   const guided = sockets[1].sent.find((message) => message.type === 'start');
-  assert.match(guided.prompt, /^The user asked: Help me buy a car\n\nThey now want a new answer that prioritizes this direction: Compare financing options\nStart by addressing that direction directly/);
+  assert.match(guided.prompt, /^Latest user direction \(highest priority\): Compare financing options\n\nEarlier task: Help me buy a car\n\nWrite a fresh answer/);
   assert.equal(state().runs.at(-1).rootPrompt, 'Help me buy a car');
   assert.equal(state().runs.at(-1).direction, 'Compare financing options');
   sockets[0].message({ type: 'token', index: 1, position: 12, text: 'stale' });
@@ -128,7 +128,7 @@ test('a suggested direction starts a fresh guided answer and keeps the original 
   assert.equal(state().startGuided('Focus on maintenance costs'), true);
   sockets[2].open();
   const second = sockets[2].sent.find((message) => message.type === 'start');
-  assert.match(second.prompt, /^The user asked: Help me buy a car\n\nThey now want a new answer that prioritizes this direction: Focus on maintenance costs\nStart by addressing that direction directly/);
+  assert.match(second.prompt, /^Latest user direction \(highest priority\): Focus on maintenance costs\n\nEarlier task: Help me buy a car\n\nWrite a fresh answer/);
   assert.doesNotMatch(second.prompt, /Compare financing options/);
 });
 
