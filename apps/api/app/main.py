@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import os
 from contextlib import suppress
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
@@ -25,6 +27,9 @@ from .schemas import (
     StatusEvent,
     StopMessage,
 )
+
+# apps/api/.env; variables already set in the shell take precedence.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 app = FastAPI(title="Interpretability Observatory API")
 
