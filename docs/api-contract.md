@@ -2,9 +2,9 @@
 
 This is the shared source of truth so `apps/web` (Samuel, Hari) and `apps/api`
 (Kareem, James) can build in parallel without waiting on each other. The API
-already implements a **mock** version of this contract that emits fake but
-correctly-shaped data — point the frontend at it today, swap in real model
-internals later without changing a single frontend type.
+already implements a **mock** version of the current contract that emits fake
+but correctly shaped data. The proposed NLA flow below adds new message types
+and requires coordinated frontend/backend changes.
 
 If you change a shape here, update both `apps/api/app/schemas.py` (Pydantic)
 and `apps/web/src/lib/contract.ts` (TypeScript) in the same commit.
@@ -20,7 +20,7 @@ One connection per generation session. Query param: `?session_id=<uuid>`
 // Start a generation run
 { "type": "start", "prompt": "string", "model": "gemma-2b" | "qwen2.5-7b" }
 
-// Steer: clamp a feature up/down and trigger regeneration from the same prompt
+// Mock only: bias future feature-firing values. This does not regenerate text.
 { "type": "clamp", "feature_id": "string", "value": -1.0 } // -1..1
 
 // Reset all clamps to 0 (no intervention)
@@ -72,9 +72,75 @@ One connection per generation session. Query param: `?session_id=<uuid>`
 ## Notes for whoever wires the real pipeline in
 
 - `coords` should already be projected (UMAP/t-SNE run once at load time over
-  the SAE/NLA feature set) — don't make the frontend do dimensionality
-  reduction. Precompute and cache it in the API.
+  a validated set of points) — don't make the frontend do dimensionality
+  reduction. NLA explanations are free-form descriptions of activation
+  vectors, not SAE feature IDs; do not fabricate a feature dictionary from
+  them just to fit the mock event shape.
 - `flag` events are the demo's "diagnostic instrument" moment — decide the
   hedging/refusal/unsupported feature signatures early since the frontend
   needs a way to visually distinguish them (color, per `--signal-alert` in
   `globals.css`).
+
+## Proposed live NLA protocol (not implemented)
+
+The shapes above are the **only** messages currently accepted by
+`apps/api/app/main.py` and understood by `apps/web/src/lib/contract.ts`.
+The real pipeline described in [orchestration.md](orchestration.md) needs a
+new protocol revision. These examples are a design target, not runnable API
+requests. When implementing them, change both schema files, the WebSocket
+handler, the frontend hook, and this document in the same code PR.
+
+The browser would start a task with explicit user instructions:
+
+```jsonc
+{
+  "type": "start",
+  "task": "Compare these laptops for programming",
+  "assumptions": ["User travels often"],
+  "constraints": ["Use only the supplied specifications"],
+  "model": "qwen2.5-7b"
+}
+```
+
+The server would stream tokens immediately and send interpretations later,
+with IDs so a delayed AV result cannot attach to the wrong continuation:
+
+```jsonc
+{ "type": "token", "run_id": "run_1", "branch_id": "base", "index": 0, "text": "For" }
+{
+  "type": "focus",
+  "run_id": "run_1", "branch_id": "base", "sample_id": "s_12",
+  "token_start": 8, "token_end": 16,
+  "label": "Discussing gaming performance",
+  "fidelity_cosine": 0.78 // optional; only after AR has scored this explanation
+}
+{
+  "type": "direction_candidate",
+  "run_id": "run_1", "branch_id": "base", "sample_id": "s_12",
+  "direction_id": "programming_v1", "label": "Return to programming needs",
+  "alignment_cosine": 0.31, "steerable": true
+}
+```
+
+Only a candidate backed by a validated vector may set `steerable: true`.
+The cosine value ranks alignment and is not a causal confidence score.
+The browser would then request a branch from that sample:
+
+```jsonc
+{
+  "type": "steer", "run_id": "run_1", "branch_id": "base",
+  "sample_id": "s_12", "direction_id": "programming_v1",
+  "polarity": "toward", "strength": 0.25
+}
+```
+
+The server would acknowledge the new branch:
+
+```jsonc
+{ "type": "branch_started", "run_id": "run_1", "branch_id": "branch_2", "parent_branch_id": "base", "replayed_from": 8 }
+```
+
+The backend must verify ownership of the run and direction, bound the
+strength, replay from a valid prefix, and tag all new tokens with the new
+branch ID. If a model service is unavailable, it should send a typed error
+for that stage while preserving the already streamed answer.
