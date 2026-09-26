@@ -21,7 +21,6 @@ less often, so /contrast defaults to block 20 alone.
 
 from __future__ import annotations
 
-import base64
 import hmac
 import logging
 import math
@@ -162,10 +161,6 @@ async def require_key(request: Request, call_next):
         if not hmac.compare_digest(supplied.encode(), f"Bearer {AV_API_KEY}".encode()):
             return JSONResponse({"detail": "unauthorized"}, status_code=401)
     return await call_next(request)
-
-
-def _encode_vector(vector: torch.Tensor) -> str:
-    return base64.b64encode(vector.float().cpu().numpy().tobytes()).decode()
 
 
 class Steer(BaseModel):
@@ -496,12 +491,3 @@ def steer(request: SteerRequest):
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
 
-
-@app.post("/activation")
-def activation(request: ExplainRequest):
-    """Research: the replayed block-20 residual minus the calibration mean."""
-    try:
-        state = _replay(request) - _mean().cpu()
-    except (ValueError, RuntimeError) as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"centered": _encode_vector(state), "norm": round(float(state.norm()), 3)}

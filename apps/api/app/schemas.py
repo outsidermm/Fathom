@@ -6,13 +6,11 @@ contract changes — see docs/api-contract.md for the canonical shapes.
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Union
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-# Reserved model value shared with the disabled frontend option. The current
-# WebSocket handler explicitly rejects it; only qwen2.5-7b is connected.
-Model = Literal["gemma-2b", "qwen2.5-7b"]
+Model = Literal["qwen2.5-7b"]
 Signature = Literal["hedging", "refusal", "unsupported"]
 StreamState = Literal["idle", "streaming", "inspecting", "done", "error"]
 
@@ -35,16 +33,6 @@ class StartMessage(BaseModel):
         if not value.strip():
             raise ValueError("prompt cannot be blank")
         return value
-
-
-class ClampMessage(BaseModel):
-    type: Literal["clamp"] = "clamp"
-    feature_id: str
-    value: float = Field(ge=-1.0, le=1.0)
-
-
-class ResetClampsMessage(BaseModel):
-    type: Literal["reset_clamps"] = "reset_clamps"
 
 
 class StopMessage(BaseModel):
@@ -72,9 +60,6 @@ class SteerMessage(BaseModel):
         return self
 
 
-ClientMessage = Union[StartMessage, ClampMessage, ResetClampsMessage, StopMessage, SteerMessage]
-
-
 # ---- server -> client -------------------------------------------------------
 
 
@@ -98,9 +83,7 @@ class ActivationEvent(BaseModel):
     value: float = Field(ge=0.0, le=1.0)
     coords: Coords
     # Not emitted by the current backend (see the "Planned only" note on this
-    # event in docs/api-contract.md), but declared here to match
-    # apps/web/src/lib/contract.ts and the fields feature-inspector.tsx /
-    # diagnostics-feed.tsx already read off "activation" events.
+    # event in docs/api-contract.md); declared to match apps/web/src/lib/contract.ts.
     explanation: Optional[str] = None
 
 
@@ -213,11 +196,6 @@ class StatusEvent(BaseModel):
     # Set with state "done": AV readings cancelled because they missed the answer.
     av_dropped: Optional[int] = None
 
-
-ServerMessage = Union[
-    TokenEvent, ActivationEvent, FlagEvent, AVEvent, AVErrorEvent,
-    AVAlternativesEvent, SteerAckEvent, BranchEvent, SteerScoreEvent, StatusEvent,
-]
 
 
 # ---- REST -------------------------------------------------------------------
