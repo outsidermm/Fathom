@@ -5,12 +5,13 @@
 
 export type Model = "gemma-2b" | "qwen2.5-7b";
 export type Signature = "hedging" | "refusal" | "unsupported";
-export type StreamState = "idle" | "streaming" | "done" | "error";
+export type StreamState = "idle" | "streaming" | "inspecting" | "done" | "error";
 
 // ---- client -> server -------------------------------------------------
 
 export type ClientMessage =
-  | { type: "start"; prompt: string; model: Model }
+  // pace (default true): hold text at each checkpoint until its AV reading arrives.
+  | { type: "start"; prompt: string; model: Model; pace?: boolean }
   | { type: "clamp"; feature_id: string; value: number } // -1..1
   | { type: "reset_clamps" }
   | { type: "stop" };
@@ -39,7 +40,35 @@ export type ServerMessage =
       signature: Signature;
       confidence: number;
     }
-  | { type: "status"; state: StreamState; message?: string };
+  | {
+      type: "av";
+      explanation: string;
+      layer: 20;
+      sample: "replayed_last_content_token" | "prompt_end"; // prompt_end: read before any answer text
+      checkpoint_id: number;
+      position: number; // character offset where the section starts; the reading precedes that text
+      label: string;
+      genre: string; // first sentence: mostly the AV's generic prior
+      detail: string; // the rest: carries most of the signal
+      focus?: string | null; // short "-ing" phrase compressing the detail, from the AV note alone
+      replay_ms?: number;
+      av_ms?: number;
+    }
+  | {
+      type: "av_error";
+      message: string;
+      checkpoint_id: number;
+      position: number;
+      label: string;
+    }
+  | {
+      type: "status";
+      state: StreamState;
+      message?: string;
+      checkpoint_id?: number; // with "inspecting"
+      label?: string; // with "inspecting"
+      av_dropped?: number; // with "done"
+    };
 
 // ---- REST ---------------------------------------------------------------
 

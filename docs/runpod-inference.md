@@ -1,9 +1,9 @@
 # Runpod inference runbook
 
 This runbook covers the persistent model files, the tested Qwen text stream,
-and the separate AV experiment. The legacy browser WebSocket now relays real
-Qwen answer text, but activation capture, AV/AR orchestration, and steering
-remain integration work.
+and the first AV integration. The browser WebSocket relays Qwen answer text and
+up to six asynchronous AV explanations of replayed block-20 checkpoints.
+Live per-token capture, AV/AR orchestration, and steering remain integration work.
 See [orchestration.md](orchestration.md) for that work and
 [target-harness-contract.md](target-harness-contract.md) for the possible
 post-hackathon browser protocol (not built this weekend — see
@@ -83,16 +83,17 @@ Pod loopback and reach it through SSH. The browser talks only to FastAPI.
      --model-path /workspace/models/qwen2.5-7b-instruct \
      --served-model-name qwen2.5-7b \
      --host 127.0.0.1 --port 30001 \
-     --mem-fraction-static 0.60 --disable-cuda-graph \
+     --mem-fraction-static 0.40 --disable-cuda-graph \
      > /root/qwen.log 2>&1 < /dev/null &
    tail -f /root/qwen.log
    ```
 
+   The lower cache reservation leaves GPU room for AV and Qwen replay.
    `--disable-cuda-graph` worked but produced a deprecation warning. Loading
-   weights from the Global volume took about 47 seconds on this Pod. The
-   first request compiled kernels and took about 86 seconds to reach the
-   browser; a later prompt reached its first token in about 0.12 seconds.
-   Those are observations, not latency guarantees. Check
+   weights from the Global volume took about 47 seconds in an earlier
+   Qwen-only run. Its first request compiled kernels and took about 86 seconds
+   to reach the browser; a later prompt reached its first token in about
+   0.12 seconds. Those are observations, not latency guarantees. Check
    `curl -fsS http://127.0.0.1:30001/v1/models` and one actual completion;
    `/health` can report 503 during startup.
 
@@ -113,59 +114,128 @@ Pod loopback and reach it through SSH. The browser talks only to FastAPI.
 
 ## Start and verify the AV experiment
 
-1. Start the Pod in Runpod. Open its web terminal and verify the mount and GPU:
+For the current end-to-end AV path, run Qwen on 30001 with its reduced cache
+reservation, the NLA AV SGLang server on 30002, and the Qwen replay + NLA
+client sidecar on 30003. Each replay regenerates the hidden state from the
+answer prefix available at its checkpoint and samples the last token containing
+letters or digits.
+Its tokenization can differ from SGLang's original token IDs. Treat the
+explanation as approximate, not a transcript.
+The upstream example specifies `hidden_states[21]` for the output of Qwen
+block 20. The sidecar code is `apps/api/pod/av_sidecar.py`.
 
-   ```bash
-   nvidia-smi
-   ls /workspace/models
-   test -f /workspace/nla-inference/nla_inference.py
-   test -f /workspace/models/nla-av/nla_meta.yaml
-   ```
+On this A100, start Qwen with `--mem-fraction-static 0.40`, then the GPU
+replay sidecar, then AV with `--mem-fraction-static 0.60` and CUDA graphs;
+`apps/api/pod/start_services.sh` does this in order. The parameter is
+applied to the free GPU memory when each server starts, not to the entire
+card. Watch `nvidia-smi` and adjust only after checking the current
+allocation. Run the AV server with
+`--disable-radix-cache`; the upstream NLA client sends `input_embeds`.
 
-2. Restore the container environment and start the AV service:
+```bash
+PATH=/root/qwen-venv/bin:$PATH nohup /root/qwen-venv/bin/python -m sglang.launch_server \
+  --model-path /workspace/models/nla-av --host 127.0.0.1 --port 30002 \
+  --disable-radix-cache --mem-fraction-static 0.60 --context-length 512 \
+  --cuda-graph-max-bs 8 --trust-remote-code > /root/nla-av.log 2>&1 < /dev/null &
 
-   ```bash
-   bash /workspace/hackgt_setup.sh
-   tail -n 30 /root/av.log
-   ```
+uv venv --system-site-packages /root/av-client-venv
+uv pip install --python /root/av-client-venv/bin/python \
+  'transformers>=4.57,<5' safetensors orjson fastapi uvicorn \
+  accelerate 'torch==2.14.0' 'torchvision==0.29.0'
+```
 
-   This script is an **experimental convenience**, copied to the volume but
-   not yet validated after a fresh Pod restart. It installs SGLang 0.5.18,
-   then pins Transformers below 5 because the upstream NLA client expected a
-   list from `apply_chat_template`, whereas Transformers 5 returned a
-   `BatchEncoding` in our smoke test. That pin conflicts with SGLang 0.5.18's
-   declared Transformers requirement; treat the environment as a known working
-   experiment, not a reproducible production lockfile. Verify both processes
-   after every restart. Do not run the setup script against a live session:
-   it stops an existing SGLang server before starting another.
+From the repository root on the local computer, copy the sidecar to the Pod:
 
-3. Wait for the service to finish loading, then check its local endpoint:
+```bash
+scp -i ~/.ssh/hackgt_runpod -P <pod-ssh-port> \
+  apps/api/pod/av_sidecar.py root@<pod-ip>:/root/av_sidecar.py
+```
 
-   ```bash
-   curl -fsS http://127.0.0.1:30000/health
-   ```
+Then launch it on the Pod:
 
-   The AV server uses `--disable-radix-cache` because NLA sends
-   `input_embeds`, not ordinary token IDs; the upstream client requires this
-   to avoid incorrect cache reuse. `--disable-cuda-graph` avoided a long
-   graph-capture stall on this A100. `--mem-fraction-static 0.70` limited
-   SGLang's static reservation. These are measured deployment choices for
-   this Pod, not general model defaults.
+```bash
+nohup env PYTHONPATH=/workspace/nla-inference QWEN_REPLAY_DEVICE=cuda:0 \
+  /root/av-client-venv/bin/uvicorn av_sidecar:app --app-dir /root \
+  --host 127.0.0.1 --port 30003 > /root/av-sidecar.log 2>&1 < /dev/null &
+```
 
-4. Run the upstream client from the **persistent** copy:
+Forward Pod port 30003 privately alongside Qwen's 30001 tunnel:
 
-   ```bash
-   python /workspace/nla-inference/nla_inference.py \
-     /workspace/models/nla-av \
-     --sglang-url http://127.0.0.1:30000 \
-     --max-new-tokens 128
-   ```
+```bash
+ssh -N -o ExitOnForwardFailure=yes -i ~/.ssh/hackgt_runpod \
+  -p <pod-ssh-port> -L 127.0.0.1:30003:127.0.0.1:30003 root@<pod-ip>
+```
 
-   Without `--parquet`, this sends a random vector. It checks loading,
-   injection, and decoding, but says nothing about semantic correctness for
-   real Qwen activations. Use a captured Qwen block-20 vector for that check.
-   Short outputs may omit the closing `<explanation>` tag and trigger the
-   client's raw-output warning without implying server failure.
+The local FastAPI process calls `AV_API_BASE=http://127.0.0.1:30003` by default. Both
+Pod services are bound to loopback; the browser receives checkpoint-linked AV
+text via FastAPI's `av` WebSocket events, interleaved with Qwen output when AV
+finishes early enough. If AV fails, it receives `av_error` and the Qwen answer
+is retained. The Pod sidecar serializes only the short replay forward pass; AV
+generation runs concurrently so the AV SGLang server can batch checkpoints.
+`AV_MAX_TOKENS` (default 96) caps each explanation; a truncated decode is cut
+back to its last full sentence. `start_services.sh` starts the sidecar before
+the AV server, then launches AV with CUDA graphs (`--mem-fraction-static 0.60`
+of the ~31 GB then free, `--cuda-graph-max-bs 8`): a reading took ~1.5 s
+instead of ~2.0 s with identical output, and three concurrent ones 1.8-2.4 s.
+The A100 then sits at about 71 of 80 GB. The sidecar loads its models at startup (a
+minute or more), and `/health` answers only afterwards.
+
+In a live probe, a short car-budget prefix returned an on-topic AV explanation
+in about 2.8 seconds, but the AV also fabricated a quotation. Interpretations
+remain experimental and should not be treated as verified descriptions of the
+model's reasoning. A separate tool-use probe showed that this SGLang launch
+returns Qwen's `<tool_call>` markup as ordinary content without a tool parser.
+Qwen called a simple calculator when directly asked, but ignored a request to
+call `checkpoint_section` after each of three answer steps. Model-chosen
+checkpoint calls are therefore not the only scheduling mechanism in this build.
+In a full WebSocket run with a three-step used-car answer, the first AV event
+arrived at 4.49 seconds, before Qwen's last text at 5.12 seconds. The second
+arrived at 7.3 seconds; step 2 was replaced in the bounded queue. The step-3
+AV text discussed inspection instead of the paperwork section and again
+fabricated a quotation. This proves concurrent delivery, not interpretive
+quality. Do not present these AV texts as reliable or enable steering from
+them without further validation.
+
+After the sidecar change (replay under the lock only, 96-token cap), warm
+measurements on the A100 were: replay forward about 31 ms, AV decode about
+20 ms per token (about 2.0 s at 96 tokens), and three concurrent requests in
+2.9–3.0 s of wall time instead of about 6 s. In three paced WebSocket runs of a
+three-step used-car answer, every step received its reading and none was
+dropped; runs finished in 3.7–4.8 s. The same prompt unpaced finished Qwen's
+text in 2.4–3.2 s and dropped all three readings, so pacing is what makes
+mid-stream readings visible at all. A sampling study over five prompts
+(15 checkpoints) found no advantage in sampling a step's heading or midpoint
+over its sentence end: each matched its own section's keywords better than
+the next section's in 14–15 of 15 cases. Every reading, whatever the sampling
+point, opened with a genre-level sentence ("structured article format with
+numbered steps") and often added invented specifics (a Honda, a visa
+interview). The UI therefore leads with the detail sentence; nothing in the
+pipeline verifies it.
+
+## Production: expose Qwen and the sidecar through Runpod's proxy
+
+For a deployed FastAPI (for example on Vercel), the Pod must be reachable
+without SSH:
+
+1. In the Runpod console, edit the Pod and set **Expose HTTP Ports** to
+   `30001,30003`. Editing restarts the Pod and resets its container disk
+   (`/root`); `/workspace` survives.
+2. From the Pod's web terminal (or SSH on the new port), run
+   `bash /workspace/hackgt/pod/start_services.sh`. It rebuilds the two
+   environments if they are missing (about 10 minutes), then starts Qwen
+   and the sidecar on `0.0.0.0` with keys and AV on loopback, and prints
+   each service once it answers.
+3. Keys live in `/workspace/hackgt/secrets.env` (generated once). The network
+   volume ignores file permissions, so treat the volume as secret-bearing.
+
+The public URLs are `https://<POD_ID>-30001.proxy.runpod.net/v1` and
+`https://<POD_ID>-30003.proxy.runpod.net`. Qwen rejects requests without
+`Authorization: Bearer $QWEN_API_KEY`; the sidecar requires
+`Bearer $AV_API_KEY` on everything except `/health`.
+
+Do not run the older `/workspace/hackgt_setup.sh` script while Qwen is live:
+it stops the existing SGLang process and starts a standalone AV experiment on
+port 30000. The path above keeps Qwen and AV available together.
 
 ## Run the current API locally
 
@@ -178,14 +248,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 export QWEN_API_BASE=http://127.0.0.1:30001/v1
 export QWEN_MODEL=qwen2.5-7b
+export AV_API_BASE=http://127.0.0.1:30003
 uvicorn app.main:app --reload --port 8000
 ```
 
 In another terminal, check `curl -fsS http://127.0.0.1:8000/api/health`.
 This starts the FastAPI bridge on port 8000; it does not launch SGLang or load
 the models locally. With a running A100 and SSH tunnel, `/ws/stream` carries
-real Qwen text. `/api/features` remains placeholder data, and AV/AR events and
-steering are not connected. Use `--reload` only for local development; it can
+real Qwen text and checkpoint-linked AV explanations when both sidecar and
+tunnel are ready.
+`/api/features` remains placeholder data, and AR and steering are not
+connected. Use `--reload` only for local development; it can
 restart the API during a model session. The browser should connect to FastAPI,
 never directly to SGLang.
 
@@ -200,7 +273,8 @@ never directly to SGLang.
   can still incur charges. Stopping ends the serving processes. If the Pod
   must be replaced, `/root/qwen-venv` and `/root/qwen.log` on its container
   disk will be lost; the `/workspace` model files remain on the Global volume.
-- If `/health` is unavailable, inspect `/root/av.log`, check `nvidia-smi`, and
+- If `/health` is unavailable, inspect `/root/nla-av.log` and
+  `/root/av-sidecar.log`, check `nvidia-smi`, and
   verify the model path. Model loading can take minutes. A successful health
   response does not prove activation injection is correct: run the client
   smoke test as well.

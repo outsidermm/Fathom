@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 Model = Literal["gemma-2b", "qwen2.5-7b"]
 Signature = Literal["hedging", "refusal", "unsupported"]
-StreamState = Literal["idle", "streaming", "done", "error"]
+StreamState = Literal["idle", "streaming", "inspecting", "done", "error"]
 
 
 # ---- client -> server -----------------------------------------------------
@@ -22,6 +22,8 @@ class StartMessage(BaseModel):
     type: Literal["start"] = "start"
     prompt: str = Field(max_length=16000)
     model: Model
+    # Hold text at each checkpoint until its AV reading arrives (or times out).
+    pace: bool = True
 
     @field_validator("prompt")
     @classmethod
@@ -79,13 +81,45 @@ class FlagEvent(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
+class AVEvent(BaseModel):
+    type: Literal["av"] = "av"
+    explanation: str
+    layer: Literal[20] = 20
+    sample: Literal["replayed_last_content_token", "prompt_end"] = "replayed_last_content_token"
+    checkpoint_id: int = Field(ge=0)
+    position: int = Field(ge=0)
+    label: str
+    # First sentence (mostly the AV's generic prior) and the rest, which
+    # carries most of the signal: show the detail first.
+    genre: str = ""
+    detail: str = ""
+    # Short "-ing" phrase compressing the detail ("advising to set a budget"),
+    # written by Qwen from the AV note alone. None when it could not be made.
+    focus: Optional[str] = None
+    replay_ms: Optional[int] = None
+    av_ms: Optional[int] = None
+
+
+class AVErrorEvent(BaseModel):
+    type: Literal["av_error"] = "av_error"
+    message: str
+    checkpoint_id: int = Field(ge=0)
+    position: int = Field(ge=0)
+    label: str
+
+
 class StatusEvent(BaseModel):
     type: Literal["status"] = "status"
     state: StreamState
     message: Optional[str] = None
+    # Set with state "inspecting": the checkpoint the text is held at.
+    checkpoint_id: Optional[int] = None
+    label: Optional[str] = None
+    # Set with state "done": AV readings cancelled because they missed the answer.
+    av_dropped: Optional[int] = None
 
 
-ServerMessage = Union[TokenEvent, ActivationEvent, FlagEvent, StatusEvent]
+ServerMessage = Union[TokenEvent, ActivationEvent, FlagEvent, AVEvent, AVErrorEvent, StatusEvent]
 
 
 # ---- REST -------------------------------------------------------------------
