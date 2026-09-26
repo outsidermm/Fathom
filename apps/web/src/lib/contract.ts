@@ -46,7 +46,7 @@ export type ServerMessage =
       layer: 20;
       sample: "replayed_last_content_token" | "prompt_end"; // prompt_end: read before any answer text
       checkpoint_id: number;
-      position: number; // character offset in the answer where the section ends
+      position: number; // character offset where the section starts; the reading precedes that text
       label: string;
       genre: string; // first sentence: mostly the AV's generic prior
       detail: string; // the rest: carries most of the signal
