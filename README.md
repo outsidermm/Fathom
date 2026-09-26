@@ -1,10 +1,24 @@
 # Interpretability Observatory — HackGT 13, Oracle of the Deep
 
-Live Qwen answers stream through the browser. The frontend has a canvas map,
-feature inspector, diagnostics, search, and run comparison ready for activation
-and steering events. Those events are still pending in the backend. The backend
-also emits replayed NLA AV checkpoint readings, but the frontend does not yet
-consume or display them.
+Watch Qwen2.5-7B think while it answers, and steer it mid-answer. Answers
+stream live from SGLang. Before each section, the browser shows what the
+model was focused on: a Natural Language Autoencoder (NLA) activation
+verbalizer reads Qwen's replayed layer-20 state. Qwen also suggests 2-3 other
+directions it could take. Click one, or type your own, and the answer
+branches from that point. The kept text stays, and a block-20 contrastive
+activation steer, anchored with the new section's opening, redirects what
+follows. Branches can be steered again.
+
+```
+browser (Next.js) ──ws──▶ FastAPI (apps/api)
+                              ├─▶ SGLang :30001   Qwen2.5-7B answer + helper calls
+                              └─▶ sidecar :30003  HF Qwen: replay, /contrast, /steer, /score
+                                     └─▶ SGLang :30002  NLA activation verbalizer (AV)
+```
+
+The 3D fish-brain feature map is ready for activation events (`?features=test`
+shows it with a test layout). The backend does not emit those events yet, and
+`/api/features` serves placeholder data.
 
 ## Team
 
@@ -17,9 +31,7 @@ See `AGENTS.md` for frontend AI-assistant guidelines, `docs/api-contract.md`
 for the interface both sides build against, and
 [`docs/deployment.md`](docs/deployment.md) for the hosted Vercel/Runpod
 setup so the whole team (not just whoever has a tunnel open) can hit a live
-URL. Design: see [docs/design-system.md](docs/design-system.md). Samuel's
-frontend work follows the phases in
-[docs/frontend-roadmap.md](docs/frontend-roadmap.md).
+URL. Design: see [docs/design-system.md](docs/design-system.md).
 
 Repository owner and deployment documentation: [outsidermm](https://github.com/outsidermm).
 The NLA models and inference client are upstream work by
@@ -63,8 +75,7 @@ uvicorn app.main:app --reload --port 8000
 Health check: `curl localhost:8000/api/health`
 This command runs the API locally. To get real Qwen output, start the A100
 model server and SSH tunnel described in [the inference runbook](docs/runpod-inference.md).
-Without them the WebSocket reports that Qwen is unavailable. Activation
-features and steering are not connected. The current
+Without them the WebSocket reports that Qwen is unavailable. The current
 [API contract](docs/api-contract.md) covers the WebSocket; the
 [conversation harness design](docs/target-harness-contract.md) is a possible
 future direction. For the planned path from live generation to explanation
@@ -113,20 +124,19 @@ and Services Beta availability; the guide documents the two-project fallback.
 
 - [x] Repo scaffolded; frontend production build/typecheck/lint and API tests pass
 - [x] Current WebSocket with a tested live Qwen text bridge and replayed AV checkpoints
-- [ ] Consume and display `av`, `av_error`, and `status: inspecting` in the frontend
+- [x] Show AV readings, alternatives, and steered branches in the frontend
 - [x] Vercel configuration and guide for frontend + API (`docs/deployment.md`)
 - [ ] Validate hosted Qwen streaming and WebSocket duration/reconnect behavior
 - [x] Runpod public proxy setup and authenticated service launch scripts documented
       (`docs/runpod-inference.md`); verify current Pod reachability before the demo
-- [ ] Real activation events and steering in the current WebSocket contract
+- [x] Steering (`steer` → `branch`) in the current WebSocket contract
+- [ ] Real activation events for the feature map
 - [x] Download Qwen2.5-7B-Instruct, NLA AV, and NLA AR checkpoints to the
       Runpod Global volume; verify one AV random-vector smoke test
 - [x] Replay real Qwen layer-20 activations for experimental AV readings (runbook)
 - [ ] Original-generation activation capture and AR reconstruction validation
 - [ ] Real activation hooks replacing placeholder `/api/features` data
-- [x] Canvas feature map for planned activation events, with keyboard selection
-      and a frontend fixture verification of the full compare loop
-- [ ] Activation and steering integration against the live Qwen backend
+- [x] 3D fish-brain feature map for planned activation events, with keyboard selection
 - [ ] Failure-signature flagging (hedging/refusal/unsupported) tuned against
       the real model instead of the mock's keyword heuristic
 - [ ] Demo framing + video

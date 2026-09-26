@@ -2,8 +2,7 @@
 
 > **Agents: read this whole file before touching any UI.** It replaces the
 > earlier "brutalist black-and-white shell" direction. Where this file and
-> `AGENTS.md` disagree, this file wins until `AGENTS.md` is updated (that
-> update is part of Phase 1 in `docs/frontend-roadmap.md`).
+> `AGENTS.md` disagree, this file wins.
 
 ## 1. The idea
 
@@ -17,7 +16,7 @@ model. So the app is split into two worlds:
 
 | World | What it is | Look |
 |---|---|---|
-| **Surface** | Everything around the visualization: top bar, prompt console, panels, inspector, feeds | HackGT's seaside: sand, planks, paper, gold buttons, teal ink, rounded display type |
+| **Surface** | Everything around the visualization: top bar, prompt console, panels, the answer and its readings | HackGT's seaside: sand, planks, paper, gold buttons, teal ink, rounded display type |
 | **The Deep** | The live feature map, and only the feature map | Dark ocean under a foam waterline, with features glowing like bioluminescence as the model generates |
 
 The waterline (an animated wave and foam edge) is the boundary between them.
@@ -60,7 +59,7 @@ is our readability choice, not an exact reproduction of the live nav.
 | `--sand` | `#e5ccae` | Sponsors/FAQ background | **default page background** |
 | `--sand-light` | `#f8eee1` | nav bar pill | top bar, raised surfaces |
 | `--sand-beach` | `#e8c08e` | beach strip | decorative bands |
-| `--paper` | `#f6efec` | pinned schedule note | inspector and note cards |
+| `--paper` | `#f6efec` | pinned schedule note | note cards and tooltips |
 | `--plank` | `#cc8f4f` | FAQ planks | accordion rows, wood surfaces |
 | `--plank-dark` | `#a45e37` | plank shadow edge | plank borders and shadows |
 | `--wood` | `#af6f40` | schedule wood wall | large wood backdrop |
@@ -113,8 +112,6 @@ swap values without re-running the checks.
    can scale with |value|.
 4. **Flags are status:** `--alert` plus a ⚠ icon plus the signature name
    ("hedging"), never color alone. Keep `--alert` exclusive to flags.
-5. The clamp slider track is a diverging scale: `--clamp-down` at −1,
-   `--deep-ink` at 20% opacity at 0, `--clamp-up` at +1.
 
 ## 4. Contrast: approved text pairings
 
@@ -257,7 +254,6 @@ for no visual gain.)
 | `apps/web/src/components/ui/button.tsx` | Keep Radix Slot/cva. Restyle variants: `default` becomes GoldButton, `secondary` becomes PlankButton, `outline` becomes a crate outline, `ghost` becomes a sand hover. Use Sen. |
 | `apps/web/src/components/ui/card.tsx` | Default look becomes PaperNote without rotation; add a `variant` prop: `paper` \| `plank` \| `sea`. |
 | `apps/web/src/components/ui/input.tsx` | `--paper` fill, 2px `--input` border, radius 12px, `--ring` focus ring 3px. |
-| New primitives | `npx shadcn@latest add tabs accordion slider tooltip dialog command`, then restyle them per §6 (CrateTabs, Plank accordion, clamp Slider, Chalkboard/Paper tooltip, cmd-K search). |
 | `AGENTS.md` (repo root) | Rewrite the "Design direction" bullet and house rule 4 to point here. Remove "brutalist", "near-monochrome", and every `--signal-*` reference. Keep the Codex skill instructions. |
 | `README.md` | Under Team, replace "B&W shell" wording. Add "Design: see docs/design-system.md". |
 | `apps/web/public/*.svg`, `src/app/favicon.ico` | Delete the create-next-app defaults. Add an original favicon (starfish or anglerfish SVG). |

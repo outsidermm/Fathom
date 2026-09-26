@@ -1,13 +1,14 @@
 # Live inference and orchestration design
 
-This is the **planned full integration**, beyond the current replay experiment.
-Today `apps/api/app/main.py` relays real Qwen answer text and queues a few
-replayed AV checkpoints through the current WebSocket. `/api/features` still
-serves placeholder feature data; original-generation activation hooks, AR,
-and steering are not connected. The [target harness contract](target-harness-contract.md)
-describes a possible **post-hackathon** conversation protocol. For this
-weekend's activation-stream contract and frontend plan, see
-[api-contract.md](api-contract.md) and [frontend-roadmap.md](frontend-roadmap.md).
+This was the **planned full integration**. Much of it now exists:
+`apps/api/app/main.py` relays real Qwen answer text with replayed AV readings
+and alternatives, and `steer` branches a run from a reading through a block-20
+contrastive steer, with an AR score afterwards (see "Steering" in
+[api-contract.md](api-contract.md)). `/api/features` still serves placeholder
+feature data, and original-generation activation hooks are not connected.
+The [target harness contract](target-harness-contract.md) describes a possible
+**post-hackathon** conversation protocol. For the current contract, see
+[api-contract.md](api-contract.md).
 The [Runpod runbook](runpod-inference.md) covers the model files and the
 separately verified AV service.
 

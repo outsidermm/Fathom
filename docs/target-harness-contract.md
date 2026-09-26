@@ -6,7 +6,7 @@
 > implemented**, and it is explicitly out of scope for HackGT 13: the team
 > already considered and passed on this direction (the "Steerable AI
 > Harness" idea) in favor of the interpretability-observatory pitch that
-> `docs/api-contract.md` and `docs/frontend-roadmap.md` describe. Kept here,
+> `docs/api-contract.md` describes. Kept here,
 > unedited, so the design work isn't lost and can be revisited later.
 > `docs/orchestration.md` and `docs/runpod-inference.md` link to this file.
 

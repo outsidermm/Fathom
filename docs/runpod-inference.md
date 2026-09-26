@@ -2,8 +2,9 @@
 
 This runbook covers the persistent model files, the tested Qwen text stream,
 and the first AV integration. The browser WebSocket relays Qwen answer text and
-up to six asynchronous AV explanations of replayed block-20 checkpoints.
-Live per-token capture, AV/AR orchestration, and steering remain integration work.
+asynchronous AV explanations of replayed block-20 checkpoints, and steered
+branches through the sidecar (see "Steering endpoints on the sidecar" below).
+Live per-token capture remains integration work.
 See [orchestration.md](orchestration.md) for that work and
 [target-harness-contract.md](target-harness-contract.md) for the possible
 post-hackathon browser protocol (not built this weekend — see
@@ -217,8 +218,8 @@ the interpretation.
 
 `apps/api/pod/av_sidecar.py` also serves `/contrast` (make a block-20 steer
 from original vs target section openings), `/steer` (stream a steered greedy
-continuation as NDJSON, one generation at a time), `/score` (AR fidelity of a
-replayed state against notes) and the research endpoint `/activation`. It now
+continuation as NDJSON, one generation at a time), and `/score` (AR fidelity of a
+replayed state against notes). It now
 keeps the full Qwen CausalLM (with `lm_head`, about 1 GB more) and loads the
 NLA AR on **CPU in float32** (`AR_DEVICE`, default `cpu`): the A100 sits at
 about 72.7 of 80 GB, and this Pod's EPYC 7742 has no bf16. An AR score takes
