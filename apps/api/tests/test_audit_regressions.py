@@ -30,10 +30,10 @@ class MessageTests(unittest.TestCase):
                 self.assertEqual(ws.receive_json()['state'], 'error')
             ws.send_bytes(b'{}')
             self.assertEqual(ws.receive_json()['state'], 'error')
-            ws.send_json({'type': 'steer', 'checkpoint_id': 2, 'alternative_id': 1})
+            ws.send_json({'type': 'steer', 'run_id': 'gone', 'checkpoint_id': 2, 'alternative_id': 1})
             self.assertEqual(ws.receive_json(), {
-                'type': 'steer_ack', 'checkpoint_id': 2, 'alternative_id': 1,
-                'applied': False, 'message': 'Steering is not connected yet',
+                'type': 'steer_ack', 'checkpoint_id': 2, 'alternative_id': 1, 'applied': False,
+                'message': 'That run is no longer available to steer', 'run_id': 'gone',
             })
             ws.send_json({'type': 'stop'})
             self.assertEqual(ws.receive_json(), {'type': 'status', 'state': 'idle'})

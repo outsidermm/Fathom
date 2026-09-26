@@ -11,14 +11,29 @@ export type StreamState = "idle" | "streaming" | "inspecting" | "done" | "error"
 
 // ---- client -> server -------------------------------------------------
 
+// Where a steer goes: one of the reading's alternatives, a typed direction,
+// or away from the reading.
+export type SteerDirection =
+  | { alternative_id: number }
+  | { text: string }
+  | { away: true };
+
 export type ClientMessage =
   // pace (default true): hold text at each checkpoint until its AV reading arrives.
-  | { type: "start"; prompt: string; model: Model; pace?: boolean }
+  // run_id is echoed on every event of the run.
+  | { type: "start"; prompt: string; model: Model; pace?: boolean; run_id?: string }
   | { type: "clamp"; feature_id: string; value: number } // -1..1
   | { type: "reset_clamps" }
   | { type: "stop" }
-  // Pick one of a reading's alternatives. Acknowledged only (steer_ack).
-  | { type: "steer"; checkpoint_id: number; alternative_id: number };
+  // Branch run_id at one of its readings (steer_ack, then branch).
+  | ({ type: "steer"; run_id: string; checkpoint_id: number } & SteerDirection);
+
+// AR measurement of the state at a steered section's opening: centered cosine
+// with the reading's note (current) and the target's note (target).
+export interface SteerScore {
+  current: number;
+  target?: number;
+}
 
 // ---- server -> client -------------------------------------------------
 
@@ -36,7 +51,8 @@ export interface Coords {
   z: number;
 }
 
-export type ServerMessage =
+// Every event of a run carries its run_id.
+export type ServerMessage = { run_id?: string } & (
   | { type: "token"; index: number; text: string; position: number }
   | {
       type: "activation";
@@ -81,11 +97,28 @@ export type ServerMessage =
       alternatives: AVAlternative[]; // 2..3
     }
   | {
-      type: "steer_ack";
+      type: "steer_ack"; // under the parent's run_id
       checkpoint_id: number;
-      alternative_id: number;
-      applied: false; // steering is not connected yet
-      message: string;
+      alternative_id?: number;
+      applied: boolean; // false: message says why; nothing else changes
+      message?: string;
+      note?: string; // a typed direction as Qwen understood it
+    }
+  | {
+      type: "branch"; // a steered run starts; its events carry run_id
+      run_id: string;
+      parent_run_id: string;
+      checkpoint_id: number; // the parent's checkpoint it branches at
+      position: number; // its text continues the parent's up to here
+      kind: "toward" | "away";
+      focus: string; // where it steers toward, or the reading it leaves
+      opening?: string; // toward: the section opening the steer was made from
+      anchored: boolean; // the branch's text starts with opening
+    }
+  | {
+      type: "steer_score"; // AR measurement, after the branch's status:done
+      before: SteerScore;
+      after: SteerScore;
     }
   | {
       type: "status";
@@ -94,7 +127,8 @@ export type ServerMessage =
       checkpoint_id?: number; // with "inspecting"
       label?: string; // with "inspecting"
       av_dropped?: number; // with "done"
-    };
+    }
+);
 
 // ---- REST ---------------------------------------------------------------
 

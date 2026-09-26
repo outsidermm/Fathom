@@ -92,11 +92,12 @@ test('finished runs accept late alternatives and steer acknowledgements while ig
   socket.message({
     type: 'av_alternatives', checkpoint_id: 0, position: 0, label: 'Plan', alternatives,
   });
-  state().steer(0, 1);
-  assert.deepEqual(socket.sent.at(-1), { type: 'steer', checkpoint_id: 0, alternative_id: 1 });
+  state().steer(0, { alternative_id: 1 });
+  const runId = state().runs.at(-1).id;
+  assert.deepEqual(socket.sent.at(-1), { type: 'steer', run_id: runId, checkpoint_id: 0, alternative_id: 1 });
   socket.message({
-    type: 'steer_ack', checkpoint_id: 0, alternative_id: 1,
-    applied: false, message: 'Steering is not connected yet',
+    type: 'steer_ack', run_id: runId, checkpoint_id: 0, alternative_id: 1,
+    applied: false, message: 'Steering is unavailable',
   });
   socket.message({ type: 'token', index: 0, position: 0, text: 'late token' });
   const run = state().runs.at(-1);
@@ -104,5 +105,38 @@ test('finished runs accept late alternatives and steer acknowledgements while ig
   assert.deepEqual(run.tokens, []);
   assert.deepEqual(run.readings[0].alternatives, alternatives);
   assert.equal(run.readings[0].selectedAlternative, 1);
-  assert.equal(run.readings[0].steerMessage, 'Steering is not connected yet');
+  assert.equal(run.readings[0].steerMessage, 'Steering is unavailable');
+  assert.equal(run.readings[0].steering, false);
+});
+
+test('a branch event becomes the active run, continuing its parent up to the branch point', async (t) => {
+  const { sockets, state } = await setup(t);
+  const socket = sockets[0];
+  socket.open();
+  state().start('buy a car', 'qwen2.5-7b');
+  const parentId = state().runs.at(-1).id;
+  socket.message({ run_id: parentId, type: 'token', index: 0, position: 0, text: 'Intro. 1. Budget' });
+  socket.message({
+    run_id: parentId, type: 'av', checkpoint_id: 1, position: 7, label: 'Step 1',
+    explanation: 'Budget.', genre: '', detail: 'Budget.', focus: 'setting a budget',
+  });
+  socket.message({ run_id: parentId, type: 'status', state: 'done' });
+  state().steer(1, { text: 'credit first' });
+  socket.message({ run_id: parentId, type: 'steer_ack', checkpoint_id: 1, applied: true, note: 'Checks credit.' });
+  socket.message({
+    type: 'branch', run_id: 'b1', parent_run_id: parentId, checkpoint_id: 1, position: 7,
+    kind: 'toward', focus: 'checking credit', opening: '1. Credit', anchored: true,
+  });
+  socket.message({ run_id: 'b1', type: 'token', index: 0, position: 7, text: '1. Credit' });
+  socket.message({ run_id: parentId, type: 'token', index: 9, position: 99, text: 'stale' });
+  const branch = state().runs.at(-1);
+  assert.equal(state().activeRunId, 'b1');
+  assert.equal(branch.parentRunId, parentId);
+  assert.equal(branch.tokens.map(token => token.text).join(''), 'Intro. 1. Credit');
+  assert.deepEqual(branch.steer, {
+    kind: 'toward', focus: 'checking credit', label: 'Step 1', opening: '1. Credit',
+    anchored: true, note: 'Checks credit.',
+  });
+  // Steering the same socket kept it open, so the branch can be steered again.
+  assert.equal(sockets.length, 1);
 });

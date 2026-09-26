@@ -11,6 +11,8 @@ import {
   type Model,
   type ServerMessage,
   type Signature,
+  type SteerDirection,
+  type SteerScore,
 } from "@/lib/contract";
 
 export type RunStatus = "streaming" | "done" | "error" | "stopped";
@@ -31,7 +33,8 @@ export interface ActivationEntry {
   explanation?: string;
 }
 // One AV checkpoint: the reading and, once they arrive, Qwen's suggested
-// alternatives. selectedAlternative is the user's steer pick.
+// alternatives. steering is set while a steer from here is on its way;
+// steerMessage says why the last one was refused.
 export interface Reading {
   checkpointId: number;
   position: number;
@@ -42,7 +45,19 @@ export interface Reading {
   error?: string;
   alternatives?: AVAlternative[];
   selectedAlternative?: number;
+  steering?: boolean;
   steerMessage?: string;
+  steerNote?: string;
+}
+// How a branch run was steered from its parent.
+export interface SteerInfo {
+  kind: "toward" | "away";
+  focus: string;
+  label: string; // the parent reading's label ("Step 1")
+  opening?: string;
+  anchored: boolean;
+  note?: string;
+  score?: { before: SteerScore; after: SteerScore };
 }
 export interface Run {
   id: string;
@@ -54,6 +69,8 @@ export interface Run {
   readings: Record<number, Reading>;
   status: RunStatus;
   message?: string;
+  parentRunId?: string;
+  steer?: SteerInfo;
 }
 interface StreamStore {
   connection: "connecting" | "open" | "retrying" | "closed";
@@ -72,7 +89,8 @@ interface StreamStore {
   resetClamps: () => void;
   selectFeature: (id: string | null) => void;
   hoverToken: (index: number | null) => void;
-  steer: (checkpointId: number, alternativeId: number) => void;
+  steer: (checkpointId: number, direction: SteerDirection) => void;
+  selectRun: (id: string) => void;
 }
 
 const HISTORY_LIMIT = 6000;
@@ -116,7 +134,8 @@ let socket: WebSocket | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryCount = 0;
 let subscribers = 0;
-let pendingStart: { prompt: string; model: Model } | null = null;
+let pendingStart: { prompt: string; model: Model; run_id: string } | null =
+  null;
 let socketEpoch = 0;
 const send = (message: object) => {
   if (socket?.readyState === WebSocket.OPEN)
@@ -140,19 +159,73 @@ const patchReading = (
         : run;
     }),
   }));
+function startBranch(message: Extract<ServerMessage, { type: "branch" }>) {
+  const { runs } = useStreamStore.getState();
+  const parent = runs.find((item) => item.id === message.parent_run_id);
+  if (!parent) return;
+  const reading = parent.readings[message.checkpoint_id];
+  const kept = parent.tokens
+    .map((token) => token.text)
+    .join("")
+    .slice(0, message.position);
+  const run: Run = {
+    id: message.run_id,
+    prompt: parent.prompt,
+    model: parent.model,
+    clamps: {},
+    // The parent's text up to the branch point, as one token.
+    tokens: kept ? [{ index: -1, text: kept }] : [],
+    flags: [],
+    readings: {},
+    status: "streaming",
+    parentRunId: parent.id,
+    steer: {
+      kind: message.kind,
+      focus: message.focus,
+      label: reading?.label ?? "",
+      opening: message.opening,
+      anchored: message.anchored,
+      note: reading?.steerNote,
+    },
+  };
+  history.set(run.id, []);
+  useStreamStore.setState((state) => ({
+    runs: [
+      ...state.runs.map((item) =>
+        item.id === parent.id
+          ? {
+              ...item,
+              readings: {
+                ...item.readings,
+                [message.checkpoint_id]: { ...reading, steering: false },
+              },
+            }
+          : item,
+      ),
+      run,
+    ],
+    activeRunId: run.id,
+    baselineRunId: parent.id,
+    hoveredTokenIndex: null,
+  }));
+}
 function handleMessage(message: ServerMessage) {
-  const { activeRunId } = useStreamStore.getState();
-  if (!activeRunId) return;
-  const run = useStreamStore
-    .getState()
-    .runs.find((item) => item.id === activeRunId);
-  if (!run) return;
-  // Alternatives and steer acks can land after status:done.
-  const late = message.type === "av_alternatives" || message.type === "steer_ack";
-  if (run.status !== "streaming" && !(late && run.status === "done")) return;
-  switch (message.type) {
+  if (message.type === "branch") return startBranch(message);
+  const { activeRunId, runs } = useStreamStore.getState();
+  // Events name their run; the rest belong to the active one.
+  const runId = message.run_id ?? activeRunId;
+  const run = runs.find((item) => item.id === runId);
+  if (!run || !runId) return;
+  // Alternatives, steer acks and scores can land after status:done, and a
+  // steer's ack reaches the parent it stopped.
+  const late =
+    message.type === "av_alternatives" ||
+    message.type === "steer_ack" ||
+    message.type === "steer_score";
+  if (run.status !== "streaming" && !(late && run.status !== "error")) return;
+    switch (message.type) {
     case "av":
-      patchReading(activeRunId, message.checkpoint_id, (reading) => ({
+      patchReading(runId, message.checkpoint_id, (reading) => ({
         ...reading,
         checkpointId: message.checkpoint_id,
         position: message.position,
@@ -163,7 +236,7 @@ function handleMessage(message: ServerMessage) {
       }));
       break;
     case "av_error":
-      patchReading(activeRunId, message.checkpoint_id, () => ({
+      patchReading(runId, message.checkpoint_id, () => ({
         checkpointId: message.checkpoint_id,
         position: message.position,
         label: message.label,
@@ -174,21 +247,30 @@ function handleMessage(message: ServerMessage) {
       }));
       break;
     case "av_alternatives":
-      patchReading(activeRunId, message.checkpoint_id, (reading) =>
+      patchReading(runId, message.checkpoint_id, (reading) =>
         reading && { ...reading, alternatives: message.alternatives },
       );
       break;
     case "steer_ack":
-      patchReading(activeRunId, message.checkpoint_id, (reading) =>
-        reading?.selectedAlternative === message.alternative_id
-          ? { ...reading, steerMessage: message.message }
-          : reading,
+      patchReading(runId, message.checkpoint_id, (reading) =>
+        reading &&
+        (message.applied
+          ? { ...reading, steerNote: message.note, steerMessage: undefined }
+          : { ...reading, steering: false, steerMessage: message.message }),
       );
+      break;
+    case "steer_score":
+      patchRun(runId, {
+        steer: run.steer && {
+          ...run.steer,
+          score: { before: message.before, after: message.after },
+        },
+      });
       break;
     case "token":
       useStreamStore.setState((state) => ({
         runs: state.runs.map((item) =>
-          item.id === activeRunId
+          item.id === runId
             ? {
                 ...item,
                 tokens: [
@@ -201,7 +283,7 @@ function handleMessage(message: ServerMessage) {
       }));
       break;
     case "activation":
-      activationBus.publish(activeRunId, {
+      activationBus.publish(runId, {
         tokenIndex: message.token_index,
         featureId: message.feature_id,
         value: message.value,
@@ -214,7 +296,7 @@ function handleMessage(message: ServerMessage) {
     case "flag":
       useStreamStore.setState((state) => ({
         runs: state.runs.map((item) =>
-          item.id === activeRunId
+          item.id === runId
             ? {
                 ...item,
                 flags: [
@@ -232,7 +314,7 @@ function handleMessage(message: ServerMessage) {
       break;
     case "status":
       if (message.state === "done" || message.state === "error")
-        patchRun(activeRunId, {
+        patchRun(runId, {
           status: message.state,
           message: message.message,
         });
@@ -365,9 +447,10 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
     }));
     history.set(id, []);
     queued = [];
-    pendingStart = { prompt: run.prompt, model };
-    // A new socket prevents late messages from a stopped run being assigned
-    // to this run until the API supports run_id on every event.
+    pendingStart = { prompt: run.prompt, model, run_id: id };
+    // A new prompt gets a new socket, so nothing from an earlier one can
+    // land here. Steers keep the socket: a run and its branches stay
+    // steerable, and their events are told apart by run_id.
     if (socket?.readyState === WebSocket.OPEN && previous) {
       socketEpoch++;
       socket.close();
@@ -415,21 +498,36 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   hoverToken(index) {
     set({ hoveredTokenIndex: index });
   },
-  // Always sent, unlike clamps: the backend only acknowledges it for now.
-  steer(checkpointId, alternativeId) {
-    const id = get().activeRunId;
-    if (!id) return;
-    patchReading(id, checkpointId, (reading) =>
+  // Branches the active run at a reading; the server replies with steer_ack
+  // and, when it applies, a branch event that becomes the new active run.
+  steer(checkpointId, direction) {
+    const run = get().runs.find((item) => item.id === get().activeRunId);
+    if (!run) return;
+    if (run.status === "streaming") patchRun(run.id, { status: "stopped" });
+    patchReading(run.id, checkpointId, (reading) =>
       reading && {
         ...reading,
-        selectedAlternative: alternativeId,
+        selectedAlternative:
+          "alternative_id" in direction ? direction.alternative_id : undefined,
+        steering: true,
         steerMessage: undefined,
+        steerNote: undefined,
       },
     );
     send({
       type: "steer",
+      run_id: run.id,
       checkpoint_id: checkpointId,
-      alternative_id: alternativeId,
+      ...direction,
+    });
+  },
+  selectRun(id) {
+    const run = get().runs.find((item) => item.id === id);
+    if (!run) return;
+    set({
+      activeRunId: id,
+      baselineRunId: run.parentRunId ?? get().baselineRunId,
+      hoveredTokenIndex: null,
     });
   },
 }));

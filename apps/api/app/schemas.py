@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Reserved model value shared with the disabled frontend option. The current
 # WebSocket handler explicitly rejects it; only qwen2.5-7b is connected.
@@ -26,6 +26,8 @@ class StartMessage(BaseModel):
     model: Model
     # Hold text at each checkpoint until its AV reading arrives (or times out).
     pace: bool = True
+    # Echoed as run_id on every event of this run; generated when missing.
+    run_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
 
     @field_validator("prompt")
     @classmethod
@@ -50,11 +52,24 @@ class StopMessage(BaseModel):
 
 
 class SteerMessage(BaseModel):
-    """The user picked one of a reading's alternatives. Acknowledged only."""
+    """Branch a run at one of its readings: toward an alternative, toward a
+    typed direction, or away from the reading. Exactly one of the three."""
 
     type: Literal["steer"] = "steer"
+    run_id: str = Field(min_length=1, max_length=64)  # the run to branch from
     checkpoint_id: int = Field(ge=0)
-    alternative_id: int = Field(ge=0, le=2)
+    alternative_id: Optional[int] = Field(default=None, ge=0, le=2)
+    text: Optional[str] = Field(default=None, min_length=1, max_length=300)
+    away: bool = False
+
+    @model_validator(mode="after")
+    def exactly_one_direction(self) -> "SteerMessage":
+        if self.text is not None and not self.text.strip():
+            raise ValueError("text cannot be blank")
+        chosen = [self.alternative_id is not None, self.text is not None, self.away]
+        if sum(chosen) != 1:
+            raise ValueError("give exactly one of alternative_id, text or away")
+        return self
 
 
 ClientMessage = Union[StartMessage, ClampMessage, ResetClampsMessage, StopMessage, SteerMessage]
@@ -143,12 +158,49 @@ class AVAlternativesEvent(BaseModel):
 
 
 class SteerAckEvent(BaseModel):
+    """Reply to steer, under the parent's run_id. applied:false says why in
+    message and does not end any run; applied:true is followed by "branch"."""
+
     type: Literal["steer_ack"] = "steer_ack"
     checkpoint_id: int = Field(ge=0)
-    alternative_id: int = Field(ge=0, le=2)
-    # Steering is not connected: the choice is recorded by the client only.
-    applied: Literal[False] = False
-    message: str
+    alternative_id: Optional[int] = Field(default=None, ge=0, le=2)
+    applied: bool
+    message: Optional[str] = None
+    # For a typed direction: what Qwen made of it, shown to the user.
+    note: Optional[str] = None
+
+
+class BranchEvent(BaseModel):
+    """A steered run starts. Its events carry the new run_id; its text
+    continues the parent's up to ``position``."""
+
+    type: Literal["branch"] = "branch"
+    run_id: str
+    parent_run_id: str
+    checkpoint_id: int = Field(ge=0)  # the parent's checkpoint it branches at
+    position: int = Field(ge=0)
+    kind: Literal["toward", "away"]
+    focus: str  # where it steers toward, or the reading it steers away from
+    # Toward only: the opening line the steer was made from.
+    opening: Optional[str] = None
+    # True when the branch's text starts with ``opening`` (replayed under the
+    # steer) rather than leaving the heading to the steered model.
+    anchored: bool = False
+
+
+class SteerScore(BaseModel):
+    # Centered cosine of the block-20 state at the section's opening with the
+    # AR reconstruction of the reading's note, and of the target's note.
+    current: float
+    target: Optional[float] = None
+
+
+class SteerScoreEvent(BaseModel):
+    """AR measurement of a branch, sent after its status:done."""
+
+    type: Literal["steer_score"] = "steer_score"
+    before: SteerScore
+    after: SteerScore
 
 
 class StatusEvent(BaseModel):
@@ -164,7 +216,7 @@ class StatusEvent(BaseModel):
 
 ServerMessage = Union[
     TokenEvent, ActivationEvent, FlagEvent, AVEvent, AVErrorEvent,
-    AVAlternativesEvent, SteerAckEvent, StatusEvent,
+    AVAlternativesEvent, SteerAckEvent, BranchEvent, SteerScoreEvent, StatusEvent,
 ]
 
 

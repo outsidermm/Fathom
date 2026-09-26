@@ -88,15 +88,23 @@ export function RunCompare() {
   // subscribing to the full `runs` array (or to a `.find(...)` over it) would
   // re-render this dialog on every token of every run, not just when a
   // comparison becomes available.
-  const baselineId = useStreamStore((state) => state.baselineRunId);
   const activeId = useStreamStore((state) => state.activeRunId);
+  const steeredId = useStreamStore((state) => {
+    const run = state.runs.find((item) => item.id === activeId);
+    return run &&
+      (Object.keys(run.clamps).length > 0 || run.parentRunId !== undefined)
+      ? run.id
+      : undefined;
+  });
+  // A branch compares with the run it was steered from.
+  const baselineId = useStreamStore(
+    (state) =>
+      state.runs.find((run) => run.id === steeredId)?.parentRunId ??
+      state.baselineRunId,
+  );
   const baselineStatus = useStreamStore(
     (state) => state.runs.find((run) => run.id === baselineId)?.status,
   );
-  const steeredId = useStreamStore((state) => {
-    const run = state.runs.find((item) => item.id === activeId);
-    return run && Object.keys(run.clamps).length > 0 ? run.id : undefined;
-  });
   const steeredStatus = useStreamStore(
     (state) => state.runs.find((run) => run.id === steeredId)?.status,
   );
@@ -118,12 +126,14 @@ export function RunCompare() {
     const baseline = runs.find((run) => run.id === baselineId);
     const steered = runs.find((run) => run.id === steeredId);
     if (!baseline || !steered) return null;
-    const label = Object.entries(steered.clamps)
-      .map(
-        ([id, value]) =>
-          `${features[id]?.label ?? id} ${value > 0 ? "+" : ""}${value.toFixed(1)}`,
-      )
-      .join(", ");
+    const label = steered.steer
+      ? `${steered.steer.kind === "away" ? "away from" : "toward"} ${steered.steer.focus} at ${steered.steer.label}`
+      : Object.entries(steered.clamps)
+          .map(
+            ([id, value]) =>
+              `${features[id]?.label ?? id} ${value > 0 ? "+" : ""}${value.toFixed(1)}`,
+          )
+          .join(", ");
     return { baseline, steered, diff: wordDiff(words(baseline), words(steered)), label };
   }, [ready, baselineId, steeredId]);
   const diff = comparison?.diff ?? null;
@@ -156,6 +166,8 @@ export function RunCompare() {
             <DialogDescription>
               Word changes between the baseline and the steered run. Highlighted
               words were inserted; struck words were removed.
+              {comparison?.steered.steer &&
+                " A steered branch keeps the text before its steering point and is decoded greedily, while the original was sampled, so some changes come from decoding."}
             </DialogDescription>
           </DialogHeader>
           {ready && diff && (
