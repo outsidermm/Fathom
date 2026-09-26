@@ -42,8 +42,8 @@ for pull requests to `main`, pushes to `main`, and manual dispatches. To keep
 production changes behind these checks, require both `API / Ruff and tests`
 and `Web / lint, tests, build` in the GitHub `main` branch rules.
 
-When the Vercel project is connected to this repository, it creates a Preview
-deployment for branch pushes and deploys `main` to production after merge.
+The connected Vercel project creates a Preview deployment for branch pushes
+and deploys `main` to production after merge.
 GitHub Actions and Vercel run independently; the branch rule is what prevents
 merging a failing PR. See
 [`docs/deployment.md`](docs/deployment.md) for the Runpod URL and Vercel
