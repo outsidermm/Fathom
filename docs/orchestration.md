@@ -1,13 +1,12 @@
 # Live inference and orchestration design
 
 This is the **planned integration**, not a description of the current
-implementation. Today `apps/api/app/main.py` streams mock tokens and mock
-features. The [target harness contract](target-harness-contract.md) describes
-that live conversation protocol as a possible **post-hackathon** direction —
-it is not what's being built this weekend. For this weekend's build, see
-[api-contract.md](api-contract.md) (the activation-stream contract the
-frontend is actually implementing against) and
-[frontend-roadmap.md](frontend-roadmap.md).
+implementation. Today `apps/api/app/main.py` relays real Qwen answer text
+through the current WebSocket, while `/api/features` still serves placeholder
+feature data. The [target harness contract](target-harness-contract.md)
+describes a possible **post-hackathon** conversation protocol. For this
+weekend's activation-stream contract and frontend plan, see
+[api-contract.md](api-contract.md) and [frontend-roadmap.md](frontend-roadmap.md).
 The [Runpod runbook](runpod-inference.md) covers the model files and the
 separately verified AV service.
 
@@ -50,7 +49,7 @@ Keep SGLang's port 30000 private to the Pod. Only the FastAPI API should be
 reachable by the browser. If the frontend is hosted elsewhere, configure an
 authenticated HTTPS/WSS entry point and an explicit `CORS_ORIGINS` allowlist.
 The existing `uvicorn app.main:app --reload --port 8000` command is for
-local mock development; model serving should use a stable process without
+local development; model serving should use a stable process without
 automatic reloads.
 
 ## One generation session

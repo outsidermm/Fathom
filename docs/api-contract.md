@@ -2,15 +2,15 @@
 
 This is the shared source of truth so `apps/web` (Samuel, Hari) and `apps/api`
 (Kareem, James) can build in parallel without waiting on each other. The API
-already implements a **mock** version of this contract that emits fake but
-correctly-shaped data — point the frontend at it today, swap in real model
-internals later without changing a single frontend type.
+currently streams **live Qwen text** in this event shape. Activation events,
+flags, and steering are planned; `/api/features` still returns placeholder
+data. The frontend should not present those placeholders as model internals.
 
 If you change a shape here, update both `apps/api/app/schemas.py` (Pydantic)
 and `apps/web/src/lib/contract.ts` (TypeScript) in the same commit.
 
 > **Not this file:** the "durable conversations, branches, attachments, tool
-> calls" harness design lives in `docs/future-vision.md`. That's a possible
+> calls" harness design lives in `docs/target-harness-contract.md`. That's a possible
 > post-hackathon direction, not what's being built this weekend — none of it
 > is implemented, and this file should never describe endpoints the running
 > API doesn't actually serve.
@@ -19,22 +19,19 @@ and `apps/web/src/lib/contract.ts` (TypeScript) in the same commit.
 
 One websocket connection per browser tab. **No state-resuming reconnect for
 the hackathon** — on disconnect, the client opens a fresh connection and
-sends `start` again to begin a new run. Clamps set before a disconnect are
-lost (the mock's `clamps` dict lives only in memory, scoped to that
-connection, in `apps/api/app/main.py`). Revisit post-hackathon if there's time.
+sends `start` again to begin a new run. The API does not persist runs or
+clamps.
 
 ### Client → server
 
 ```jsonc
-// Start a generation run
-{ "type": "start", "prompt": "string", "model": "gemma-2b" | "qwen2.5-7b" }
+// Start a generation run; qwen2.5-7b is the only connected model
+{ "type": "start", "prompt": "string", "model": "qwen2.5-7b" }
 
-// Steer: set a clamp value for a feature. This does NOT trigger a new run —
-// it's stored server-side and applied on the NEXT "start" message. Send
-// "start" again with the same prompt to see the steered output.
+// Reserved steering messages: currently return status:error and do not
+// change generation. Do not show these controls as available yet.
 { "type": "clamp", "feature_id": "string", "value": -1.0 } // -1..1
 
-// Reset all clamps to 0 (no intervention)
 { "type": "reset_clamps" }
 
 // Stop the current stream
@@ -44,11 +41,11 @@ connection, in `apps/api/app/main.py`). Revisit post-hackathon if there's time.
 ### Server → client
 
 ```jsonc
-// A generated token, in order
+// A generated Qwen text delta, in order (may be a partial word)
 { "type": "token", "index": 0, "text": "The", "position": 0 }
 
-// A feature firing for the most recent token — this is what drives the
-// live map. token_index ties it back to the "token" event above.
+// Planned only: not emitted by the current backend.
+// token_index ties it back to the "token" event above.
 {
   "type": "activation",
   "token_index": 0,
@@ -57,7 +54,7 @@ connection, in `apps/api/app/main.py`). Revisit post-hackathon if there's time.
   "coords": { "x": 12.4, "y": -3.1, "z": 0.8 } // precomputed 3D layout position; all axes required
 }
 
-// A failure-signature detector firing mid-stream (the "diagnostic instrument" hook)
+// Planned only: not emitted by the current backend.
 {
   "type": "flag",
   "token_index": 14,
@@ -73,7 +70,7 @@ connection, in `apps/api/app/main.py`). Revisit post-hackathon if there's time.
 ## REST
 
 - `GET /api/health` → `{ "status": "ok" }`
-- `GET /api/features` → list of known features for the search/legend panel:
+- `GET /api/features` → placeholder feature list, not derived from Qwen:
 
 ```jsonc
 [

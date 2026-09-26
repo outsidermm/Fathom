@@ -1,9 +1,9 @@
 # Runpod inference runbook
 
-This runbook covers the **existing experimental Pod**, its persistent files, and
-the manual AV smoke test. It does not imply that the repository API is already
-connected to the models: `apps/api/app/main.py` still calls `run_mock_stream`.
-The target-model hook, AR scoring, and live steering remain integration work.
+This runbook covers the persistent model files, the tested Qwen text stream,
+and the separate AV experiment. The legacy browser WebSocket now relays real
+Qwen answer text, but activation capture, AV/AR orchestration, and steering
+remain integration work.
 See [orchestration.md](orchestration.md) for that work and
 [target-harness-contract.md](target-harness-contract.md) for the possible
 post-hackathon browser protocol (not built this weekend — see
@@ -11,7 +11,7 @@ post-hackathon browser protocol (not built this weekend — see
 
 ## What lives where
 
-| Item | Location | Survives a Pod stop? |
+| Item | Location | Survives replacement with a new Pod? |
 | --- | --- | --- |
 | Qwen2.5-7B-Instruct target weights | `/workspace/models/qwen2.5-7b-instruct` | Yes |
 | NLA AV weights | `/workspace/models/nla-av` | Yes |
@@ -20,12 +20,14 @@ post-hackathon browser protocol (not built this weekend — see
 | Experimental restart script | `/workspace/hackgt_setup.sh` | Yes |
 | Installed Python packages, processes, logs under `/root` | Container disk | No |
 
-The Pod was provisioned as `hackgt-nla-setup` (`h2r390d0dwabeq`) on one A100
-SXM4 80 GB. Runpod's **Volumes** tab showed the Global volume
+The original Pod was `hackgt-nla-setup` (`h2r390d0dwabeq`) on one A100
+SXM4 80 GB. Its GPU became unavailable after stopping, so a replacement
+`hackgt-qwen-nla` (`4xtv64rlg1fp5z`) was deployed on an A100 SXM 80 GB.
+Runpod's **Volumes** tab showed the Global volume
 `hackgt-nla-models` mounted at `/workspace` with about 41 GB stored. Check the
-mount and its contents again before stopping or rebuilding the Pod. Do not
-mistake a stopped Pod for a running inference endpoint; starting it requires
-the runtime and processes to be restored.
+mount and its contents again before stopping or rebuilding the Pod. A new
+container needs the serving runtime and processes restored before it is an
+inference endpoint.
 
 [`Qwen/Qwen2.5-7B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
 is the target model released by Qwen. The NLA pair was released by
@@ -38,6 +40,76 @@ activation from that text so we can score explanation fidelity. Their upstream
 [inference repository](https://github.com/kitft/nla-inference) defines the
 tokenizer, prompt, injection, and scoring recipe; read `nla_meta.yaml` from
 the checkpoint instead of hardcoding its token IDs or scale.
+
+## Run the live Qwen text bridge
+
+The replacement Pod was tested with the official Runpod PyTorch 2.8.0 image,
+one A100 SXM 80 GB, a 30 GB container disk, and `hackgt-nla-models` mounted
+at `/workspace`. Its compute price was $1.59/hour at the time of testing;
+check the live console before starting it again. Keep the Qwen HTTP port on
+Pod loopback and reach it through SSH. The browser talks only to FastAPI.
+
+1. Start the Pod in Runpod, verify the volume in its **Volumes** tab, and use
+   the current **Connect** tab for SSH host and port. A dedicated local key
+   `~/.ssh/hackgt_runpod` was added to this Runpod account. Do not commit the
+   private key. From an SSH shell on the Pod, check:
+
+   ```bash
+   nvidia-smi
+   ls /workspace/models
+   ```
+
+2. If `/root/qwen-venv` is missing, create the serving environment in the
+   container and install SGLang. The PyTorch image disallows system-wide pip
+   installs, and the Global volume did not support creating a virtualenv:
+
+   ```bash
+   uv venv --system-site-packages /root/qwen-venv
+   uv pip install --prerelease=allow --python /root/qwen-venv/bin/python sglang==0.5.18
+   /root/qwen-venv/bin/python -c 'import torch,sglang; print(torch.__version__,sglang.__version__)'
+   ```
+
+   The tested environment resolved PyTorch 2.13.0+cu130 and SGLang 0.5.18.
+   Keep it separate from the AV experiment, whose Transformers pin conflicts
+   with this SGLang environment. Recreate it if a replacement Pod lacks the
+   container disk.
+
+3. Start Qwen only if it is not already serving on port 30001. The virtualenv
+   must be on `PATH` because FlashInfer invokes its `ninja` executable while
+   compiling kernels:
+
+   ```bash
+   PATH=/root/qwen-venv/bin:$PATH nohup /root/qwen-venv/bin/python -m sglang.launch_server \
+     --model-path /workspace/models/qwen2.5-7b-instruct \
+     --served-model-name qwen2.5-7b \
+     --host 127.0.0.1 --port 30001 \
+     --mem-fraction-static 0.60 --disable-cuda-graph \
+     > /root/qwen.log 2>&1 < /dev/null &
+   tail -f /root/qwen.log
+   ```
+
+   `--disable-cuda-graph` worked but produced a deprecation warning. Loading
+   weights from the Global volume took about 47 seconds on this Pod. The
+   first request compiled kernels and took about 86 seconds to reach the
+   browser; a later prompt reached its first token in about 0.12 seconds.
+   Those are observations, not latency guarantees. Check
+   `curl -fsS http://127.0.0.1:30001/v1/models` and one actual completion;
+   `/health` can report 503 during startup.
+
+4. On the local computer, open an SSH tunnel using the **current** direct TCP
+   host and port from Runpod's Connect tab. Keep it open while testing:
+
+   ```bash
+   ssh -N -o ExitOnForwardFailure=yes -i ~/.ssh/hackgt_runpod \
+     -p <pod-ssh-port> -L 127.0.0.1:30001:127.0.0.1:30001 root@<pod-ip>
+   ```
+
+   Start the local backend with `QWEN_API_BASE` set to
+   `http://127.0.0.1:30001/v1`, then run the Next.js frontend on port 3000.
+   The backend WebSocket is `ws://127.0.0.1:8000/ws/stream`; send
+   `{"type":"start","prompt":"Say hello","model":"qwen2.5-7b"}`.
+   A live test streamed 19 Qwen chunks through it, and the browser displayed
+   the completed answer. No public Qwen HTTP port was exposed.
 
 ## Start and verify the AV experiment
 
@@ -104,15 +176,18 @@ cd apps/api
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+export QWEN_API_BASE=http://127.0.0.1:30001/v1
+export QWEN_MODEL=qwen2.5-7b
 uvicorn app.main:app --reload --port 8000
-curl -fsS http://127.0.0.1:8000/api/health
 ```
 
-This starts the **mock FastAPI app** on port 8000. It does not start SGLang
-and does not load Qwen, AV, or AR. Use `--reload` for local development only;
-it can restart the API process while a live model session is in progress.
-Port 30000 is an internal model endpoint. The browser should connect to the
-FastAPI WebSocket on port 8000, never directly to SGLang.
+In another terminal, check `curl -fsS http://127.0.0.1:8000/api/health`.
+This starts the FastAPI bridge on port 8000; it does not launch SGLang or load
+the models locally. With a running A100 and SSH tunnel, `/ws/stream` carries
+real Qwen text. `/api/features` remains placeholder data, and AV/AR events and
+steering are not connected. Use `--reload` only for local development; it can
+restart the API during a model session. The browser should connect to FastAPI,
+never directly to SGLang.
 
 ## Stop, restart, and troubleshoot
 
@@ -122,8 +197,9 @@ FastAPI WebSocket on port 8000, never directly to SGLang.
   configured even while this Global volume appeared attached; do not rely on
   the dialog alone to establish persistence.
 - Stop the Pod when idle to stop GPU compute billing. Global volume storage
-  can still incur charges. Stopping terminates AV and removes installed
-  packages and `/root/av.log`; restart from step 1.
+  can still incur charges. Stopping ends the serving processes. If the Pod
+  must be replaced, `/root/qwen-venv` and `/root/qwen.log` on its container
+  disk will be lost; the `/workspace` model files remain on the Global volume.
 - If `/health` is unavailable, inspect `/root/av.log`, check `nvidia-smi`, and
   verify the model path. Model loading can take minutes. A successful health
   response does not prove activation injection is correct: run the client

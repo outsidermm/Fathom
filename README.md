@@ -1,7 +1,7 @@
 # Interpretability Observatory — HackGT 13, Oracle of the Deep
 
-A live, navigable map of what's happening inside a language model as it
-generates — click a feature, clamp it, regenerate, watch the output change.
+Live Qwen answers now stream through the browser. The next step is to map
+sampled activations and let users steer and compare revised continuations.
 
 ## Team
 
@@ -21,14 +21,14 @@ The NLA models and inference client are upstream work by
 
 ```
 apps/web/    Next.js + TypeScript + shadcn/ui frontend
-apps/api/    FastAPI backend — currently a mock activation stream
+apps/api/    FastAPI backend — live Qwen text bridge; activation stream pending
 docs/        API contract, Runpod runbook, live orchestration design
 docker-compose.yml   Postgres
 ```
 
 ## Quick start
 
-**Backend** (legacy mock stream for local UI development):
+**Backend** (legacy WebSocket with live Qwen text through a private tunnel):
 
 ```bash
 cd apps/api
@@ -38,10 +38,14 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 Health check: `curl localhost:8000/api/health`
-This command runs the mock API, which does not implement the target
-[conversation contract](docs/api-contract.md). For the separate Runpod model setup, see
-[the inference runbook](docs/runpod-inference.md). For the planned path from
-live generation to explanation and task steering, see
+This command runs the API locally. To get real Qwen output, start the A100
+model server and SSH tunnel described in [the inference runbook](docs/runpod-inference.md).
+Without them the WebSocket reports that Qwen is unavailable. Activation
+features and steering are not connected. The current
+[API contract](docs/api-contract.md) covers the WebSocket; the
+[conversation harness design](docs/target-harness-contract.md) is a possible
+future direction. For the planned path from live generation to explanation
+and task steering, see
 [the orchestration design](docs/orchestration.md).
 
 **Frontend**:
@@ -53,8 +57,9 @@ cp .env.example .env.local   # or copy the NEXT_PUBLIC_* vars from the root .env
 npm run dev
 ```
 
-Open http://localhost:3000 — type a prompt, hit run, watch fake features
-light up. Click a dot in the map to clamp that feature and re-run.
+Open http://localhost:3000, type a prompt, and press run. With the A100 and
+SSH tunnel active, the answer streams from Qwen. The activation map and
+steering are still pending; the UI does not claim they are live.
 
 **Postgres** (not wired into the API yet — bring it up once you know what
 you're persisting):
@@ -66,13 +71,12 @@ docker compose up -d
 ## Status
 
 - [x] Repo scaffolded, frontend and backend build/typecheck clean
-- [x] Legacy mock WebSocket stream for early frontend development
-- [ ] Live conversation API, history, attachments, replies, tool events,
-      inspection, and steering from the target contract
+- [x] Legacy WebSocket with a tested live Qwen text bridge
+- [ ] Real activation events and steering in the current WebSocket contract
 - [x] Download Qwen2.5-7B-Instruct, NLA AV, and NLA AR checkpoints to the
       Runpod Global volume; verify one AV random-vector smoke test
 - [ ] Validate AV on real Qwen layer-20 activations and AR reconstruction
-- [ ] Real activation hooks replacing `apps/api/app/mock_stream.py`
+- [ ] Real activation hooks replacing placeholder `/api/features` data
 - [ ] Real three.js/D3 force-layout visualization replacing the placeholder
       SVG scatter in `apps/web/src/components/observatory/observatory.tsx`
 - [ ] Failure-signature flagging (hedging/refusal/unsupported) tuned against
