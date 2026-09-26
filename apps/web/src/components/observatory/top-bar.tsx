@@ -26,11 +26,14 @@ export function TopBar({
   return (
     <header className="surface-panel relative z-20 flex flex-wrap items-center justify-between gap-4 px-5 py-4">
       <div className="flex items-center gap-3">
+        {/* Served as-is: /_next/image is not routed on the Vercel Services
+            deployment, so an optimized image 404s there. */}
         <Image
-          src="/brand/fathom-mark.png"
+          src="/brand/fathom-mark-112.png"
           alt=""
           width={56}
           height={56}
+          unoptimized
           className="shrink-0"
         />
         <div className="flex flex-col gap-1">
