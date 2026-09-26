@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import httpx
 
-from .av_text import clean_focus, split_explanation
+from .av_text import clean_focus, similar_focus, split_explanation
 from .checkpoints import LOOKAHEAD, PLAN, Checkpoint, next_checkpoint
-from .schemas import AVErrorEvent, AVEvent, StatusEvent, TokenEvent
+from .schemas import AVAlternativesEvent, AVErrorEvent, AVEvent, StatusEvent, TokenEvent
 
 SendEvent = Callable[[dict], Awaitable[None]]
+logger = logging.getLogger(__name__)
 
 
 def _qwen_endpoint() -> tuple[str, str, dict[str, str]]:
@@ -137,6 +140,161 @@ async def summarize_focus(note: str, *, client: httpx.AsyncClient | None = None)
             await client.aclose()
 
 
+_ALTERNATIVES_SYSTEM = (
+    "You suggest other directions a language model could take at one point in "
+    "its answer. You get the user's task, the answer so far, and an "
+    "interpretability note on what the model's internal state was focused on "
+    "there. Propose {n} other steps the model could take next in this same "
+    "task, each a different part of the overall workflow (if the note is about "
+    "setting a budget, others might be choosing a car type or comparing "
+    "financing). Each must differ from the note and from each other, and stay "
+    "on the task. For each, write a 'detail' of one or two sentences in the "
+    "note's voice, saying what the section would do and what it sets up next, "
+    "without quoting answer text; and a 'focus' of 3 to 7 words that starts "
+    "with a lowercase -ing verb and names the specific topic. When the answer "
+    "so far is empty, propose other overall approaches to the task. "
+    'Reply only with JSON: {{"alternatives": [{{"focus": "...", "detail": "..."}}]}}'
+)
+# The budget note from _FOCUS_EXAMPLES, with sibling steps of the same task.
+_ALTERNATIVES_EXAMPLE = (
+    "Help me buy my first car.",
+    "When you start looking at cars, it's important to determine your budget.",
+    _FOCUS_EXAMPLES[0][0],
+    [
+        {"focus": "weighing what type of vehicle fits",
+         "detail": "The section turns to a personal assessment of vehicle type, asking about "
+                   "size, seating and features, and expects a list of needs next."},
+        {"focus": "comparing loan and lease financing",
+         "detail": "The step introduces financing, weighing loans, leases and interest rates "
+                   "before any purchase is made."},
+        {"focus": "planning a dealership visit",
+         "detail": "The section moves to visiting a dealership, setting up test drives and "
+                   "questions to ask the salesperson."},
+        {"focus": "estimating insurance and running costs",
+         "detail": "The step looks past the price to insurance, fuel and upkeep, before "
+                   "narrowing down models."},
+    ],
+)
+
+
+def _alternatives_request(task: str, answer: str, note: str) -> str:
+    return f"Task: {task}\n\nAnswer so far:\n{answer or '(empty)'}\n\nNote: {note}"
+
+
+def _alternatives_schema(n: int) -> dict:
+    item = {
+        "type": "object",
+        "properties": {"focus": {"type": "string"}, "detail": {"type": "string"}},
+        "required": ["focus", "detail"],
+    }
+    return {"type": "json_schema", "json_schema": {"name": "alternatives", "schema": {
+        "type": "object",
+        "properties": {"alternatives": {
+            "type": "array", "items": item, "minItems": n, "maxItems": n,
+        }},
+        "required": ["alternatives"],
+    }}}
+
+
+def _parse_alternatives(content: str) -> list:
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        start, end = content.find("{"), content.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        payload = json.loads(content[start:end + 1])
+    items = payload.get("alternatives") if isinstance(payload, dict) else None
+    if not isinstance(items, list):
+        raise ValueError("no alternatives list")
+    return items
+
+
+def alternatives_count() -> int:
+    """AV_ALTERNATIVES clamped to what the contract allows: 0 (off), 2 or 3."""
+    count = int(_env_float("AV_ALTERNATIVES", 3))
+    return 0 if count <= 0 else min(max(count, 2), 3)
+
+
+async def request_alternatives(
+    prompt: str,
+    answer: str,
+    reading: dict,
+    *,
+    n: int = 3,
+    client: httpx.AsyncClient | None = None,
+) -> dict | None:
+    """An ``av_alternatives`` event for one ``av`` reading, or None.
+
+    Qwen sees the task, the answer up to the checkpoint and the AV note, and
+    proposes other steps of the same task in the reading's form. These are
+    suggestions, not readings of the model's state.
+    """
+    note = reading.get("detail") or reading.get("explanation") or ""
+    # One spare, so a candidate that repeats the reading can be dropped.
+    asked = n + 1
+    url, model, headers = _qwen_endpoint()
+    task, example_answer, example_note, example_alternatives = _ALTERNATIVES_EXAMPLE
+    messages = [
+        {"role": "system", "content": _ALTERNATIVES_SYSTEM.format(n=asked)},
+        {"role": "user", "content": _alternatives_request(task, example_answer, example_note)},
+        {"role": "assistant", "content": json.dumps({"alternatives": example_alternatives[:asked]})},
+        {"role": "user", "content": _alternatives_request(prompt, answer, note)},
+    ]
+    body = {
+        "model": model, "messages": messages, "temperature": 0.7, "max_tokens": 320,
+        "response_format": _alternatives_schema(asked),
+    }
+    owns_client = client is None
+    if client is None:
+        client = httpx.AsyncClient(timeout=httpx.Timeout(20.0))
+    try:
+        response = await client.post(url, headers=headers, json=body)
+        if response.status_code == 400:  # No grammar backend: ask for plain JSON.
+            body.pop("response_format")
+            response = await client.post(url, headers=headers, json=body)
+        response.raise_for_status()
+        items = _parse_alternatives(response.json()["choices"][0]["message"]["content"])
+    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
+        logger.warning("alternatives failed for %s: %s", reading.get("label"), exc)
+        return None
+    finally:
+        if owns_client:
+            await client.aclose()
+
+    candidates = [
+        (str(item.get("focus") or ""), str(item.get("detail") or "").strip())
+        for item in items if isinstance(item, dict)
+    ]
+    candidates = [(focus, detail) for focus, detail in candidates if detail]
+
+    async def label(focus: str, detail: str) -> str | None:
+        focus = clean_focus(re.sub(r"\s*\([^)]*\)", "", focus), detail)
+        if focus and focus.split()[0].endswith("ing"):
+            return focus
+        # Qwen often writes a noun phrase here ("veto override"); label the
+        # detail the way readings are labeled instead.
+        return await summarize_focus(detail)
+
+    focuses = await asyncio.gather(*(label(*candidate) for candidate in candidates))
+    seen = [reading["focus"]] if reading.get("focus") else []
+    alternatives = []
+    for focus, (_, detail) in zip(focuses, candidates):
+        if not focus or any(similar_focus(focus, other) for other in seen):
+            continue
+        seen.append(focus)
+        alternatives.append({"id": len(alternatives), "focus": focus, "detail": detail})
+        if len(alternatives) == n:
+            break
+    if len(alternatives) < 2:
+        logger.warning("alternatives for %s: only %d usable", reading.get("label"), len(alternatives))
+        return None
+    return AVAlternativesEvent(
+        checkpoint_id=reading["checkpoint_id"], position=reading["position"],
+        label=reading["label"], alternatives=alternatives,
+    ).model_dump()
+
+
 # The plan reads "<|im_start|>" before "assistant\n", two tokens before the
 # prompt's end: in scripts/predict_eval.py its phrases matched their own answer
 # 75% of the time vs 58% at the last token (12 prompts, chance 50%).
@@ -175,15 +333,25 @@ async def run_qwen_stream(
     then holds at each section start until that section's reading arrives or
     AV_HOLD_TIMEOUT passes, and drips out buffered text afterwards. A reading
     still pending once all text is out is cancelled, not sent.
+
+    Each reading also starts a request for alternative directions, sent after
+    the reading itself; ones still running at status:done get AV_ALT_GRACE
+    seconds more.
     """
     hold_timeout = _env_float("AV_HOLD_TIMEOUT", 4.0)
     semaphore = asyncio.Semaphore(max(1, int(_env_float("AV_CONCURRENCY", 3))))
+    alt_count = alternatives_count()
+    # Separate from the AV slots: alternatives go to Qwen, not the sidecar.
+    alt_semaphore = asyncio.Semaphore(max(1, int(_env_float("AV_ALT_CONCURRENCY", 2))))
+    alt_grace = _env_float("AV_ALT_GRACE", 10.0)
     lookahead = LOOKAHEAD if pace else 0
     streamed = ""  # Everything Qwen has produced so far.
     streamed_done = False
     changed = asyncio.Event()
     checkpoints: list[tuple[Checkpoint, asyncio.Task[dict]]] = []
     sent: set[int] = set()
+    shown: list[asyncio.Event] = []  # Set once a checkpoint's reading is sent.
+    alt_tasks: list[tuple[int, asyncio.Task[None]]] = []
     announced = False  # Whether "streaming" has been sent.
 
     async def announce() -> None:
@@ -192,18 +360,30 @@ async def run_qwen_stream(
             announced = True
             await send(StatusEvent(state="streaming").model_dump(exclude_none=True))
 
+    async def run_alternatives(checkpoint_id: int, prefix: str, reading: dict) -> None:
+        async with alt_semaphore:
+            event = await request_alternatives(prompt, prefix, reading, n=alt_count)
+        if event is not None:
+            await shown[checkpoint_id].wait()  # Never before the reading itself.
+            await send(event)
+
     async def run_av(checkpoint_id: int, checkpoint: Checkpoint, prefix: str) -> dict:
         async with semaphore:
-            return await _request_av(
+            reading = await _request_av(
                 prompt, prefix, checkpoint_id=checkpoint_id,
                 checkpoint=checkpoint, client=av_client,
             )
+        if alt_count and reading["type"] == "av":
+            task = asyncio.create_task(run_alternatives(checkpoint_id, prefix, reading))
+            alt_tasks.append((checkpoint_id, task))
+        return reading
 
     def schedule(checkpoint: Checkpoint, answer: str) -> None:
         task = asyncio.create_task(
             run_av(len(checkpoints), checkpoint, answer[: checkpoint.sample_end])
         )
         checkpoints.append((checkpoint, task))
+        shown.append(asyncio.Event())
 
     async def produce() -> None:
         nonlocal streamed, streamed_done
@@ -241,6 +421,7 @@ async def run_qwen_stream(
             if checkpoint_id not in sent and checkpoint.position <= released and task.done():
                 sent.add(checkpoint_id)
                 await send(task.result())
+                shown[checkpoint_id].set()
 
     async def hold(checkpoint_id: int, released: int) -> None:
         nonlocal announced
@@ -313,6 +494,10 @@ async def run_qwen_stream(
         await send(StatusEvent(
             state="done", av_dropped=len(checkpoints) - len(sent)
         ).model_dump(exclude_none=True))
+        # Alternatives for readings on screen may still land after done.
+        waiting = [task for checkpoint_id, task in alt_tasks if checkpoint_id in sent]
+        if waiting:
+            await asyncio.wait(waiting, timeout=alt_grace)
     except httpx.HTTPStatusError as exc:
         await send(
             StatusEvent(
@@ -330,6 +515,10 @@ async def run_qwen_stream(
         for task in pending:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
+        # Collected after the readings stop, so none can start another.
+        for _, task in alt_tasks:
+            task.cancel()
+        await asyncio.gather(*(task for _, task in alt_tasks), return_exceptions=True)
 
 
 async def _request_av(

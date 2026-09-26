@@ -17,3 +17,6 @@ apps/web/.env*.local
 .vscode/
 .idea/
 .vercel
+
+# eval reports
+apps/api/scripts/out/
