@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,11 +25,20 @@ export function TopBar({
 }) {
   return (
     <header className="surface-panel relative z-20 flex flex-wrap items-center justify-between gap-4 px-5 py-4">
-      <div className="flex flex-col gap-3">
-        <h1 className="surface-title">Fathom</h1>
-        <p className="font-body text-xs">
-          See what surfaces. Shape what happens next.
-        </p>
+      <div className="flex items-center gap-3">
+        <Image
+          src="/brand/fathom-mark.png"
+          alt=""
+          width={56}
+          height={56}
+          className="shrink-0"
+        />
+        <div className="flex flex-col gap-1">
+          <h1 className="surface-title">Fathom</h1>
+          <p className="font-body text-xs">
+            See what surfaces. Shape what happens next.
+          </p>
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 font-ui text-sm font-bold">
