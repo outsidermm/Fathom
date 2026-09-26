@@ -1,4 +1,4 @@
-"""Interpretability Observatory API — mock pipeline.
+"""Interpretability Observatory API — live Qwen text-stream bridge.
 
 Run: uvicorn app.main:app --reload --port 8000
 Contract: ../../docs/api-contract.md
@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import suppress
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
-from .mock_stream import FEATURES, run_mock_stream
+from .mock_stream import FEATURES
+from .qwen_stream import run_qwen_stream
 from .schemas import (
     ClampMessage,
     Feature,
@@ -48,16 +50,19 @@ async def features() -> list[Feature]:
 @app.websocket("/ws/stream")
 async def ws_stream(websocket: WebSocket) -> None:
     await websocket.accept()
-    clamps: dict[str, float] = {}
     run_task: asyncio.Task | None = None
+    send_lock = asyncio.Lock()
 
     async def send(payload: dict) -> None:
-        await websocket.send_json(payload)
+        async with send_lock:
+            await websocket.send_json(payload)
 
-    def cancel_run() -> None:
+    async def cancel_run() -> None:
         nonlocal run_task
         if run_task and not run_task.done():
             run_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await run_task
         run_task = None
 
     try:
@@ -74,21 +79,30 @@ async def ws_stream(websocket: WebSocket) -> None:
                         StatusEvent(state="error", message=str(exc)).model_dump(exclude_none=True)
                     )
                     continue
-                cancel_run()
-                run_task = asyncio.create_task(run_mock_stream(msg.prompt, clamps, send))
+                await cancel_run()
+                if msg.model != "qwen2.5-7b":
+                    await send(
+                        StatusEvent(state="error", message="Only qwen2.5-7b is connected").model_dump()
+                    )
+                    continue
+                run_task = asyncio.create_task(run_qwen_stream(msg.prompt, send))
 
             elif msg_type == "clamp":
-                msg = ClampMessage.model_validate(raw)
-                clamps[msg.feature_id] = msg.value
+                ClampMessage.model_validate(raw)
+                await send(
+                    StatusEvent(state="error", message="Activation steering is not connected yet").model_dump()
+                )
 
             elif msg_type == "reset_clamps":
                 ResetClampsMessage.model_validate(raw)
-                clamps.clear()
+                await send(
+                    StatusEvent(state="error", message="Activation steering is not connected yet").model_dump()
+                )
 
             elif msg_type == "stop":
                 StopMessage.model_validate(raw)
-                cancel_run()
-                await send(StatusEvent(state="idle").model_dump(exclude_none=True))
+                await cancel_run()
+                await send(StatusEvent(state="idle").model_dump())
 
             else:
                 await send(
@@ -97,4 +111,4 @@ async def ws_stream(websocket: WebSocket) -> None:
                     ).model_dump(exclude_none=True)
                 )
     except WebSocketDisconnect:
-        cancel_run()
+        await cancel_run()

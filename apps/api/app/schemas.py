@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 Model = Literal["gemma-2b", "qwen2.5-7b"]
 Signature = Literal["hedging", "refusal", "unsupported"]
@@ -20,8 +20,15 @@ StreamState = Literal["idle", "streaming", "done", "error"]
 
 class StartMessage(BaseModel):
     type: Literal["start"] = "start"
-    prompt: str
+    prompt: str = Field(max_length=16000)
     model: Model
+
+    @field_validator("prompt")
+    @classmethod
+    def prompt_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("prompt cannot be blank")
+        return value
 
 
 class ClampMessage(BaseModel):
