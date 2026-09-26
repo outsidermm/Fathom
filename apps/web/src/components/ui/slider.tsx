@@ -54,6 +54,9 @@ function Slider({
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
+          aria-label={props["aria-label"]}
+          aria-labelledby={props["aria-labelledby"]}
+          aria-describedby={props["aria-describedby"]}
           className="block size-5 shrink-0 rounded-full border-[3px] border-driftwood bg-paper shadow-[0_2px_4px_rgb(80_49_32_/_0.3)] transition-[box-shadow,transform] hover:scale-110 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-harbor disabled:pointer-events-none disabled:opacity-50"
         />
       ))}

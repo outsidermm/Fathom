@@ -83,38 +83,51 @@ function DiffText({
   );
 }
 export function RunCompare() {
-  const runs = useStreamStore((state) => state.runs);
+  // Select the run *statuses* rather than the run objects themselves: a run's
+  // tokens/flags arrays get new references on every streamed token, and
+  // subscribing to the full `runs` array (or to a `.find(...)` over it) would
+  // re-render this dialog on every token of every run, not just when a
+  // comparison becomes available.
   const baselineId = useStreamStore((state) => state.baselineRunId);
   const activeId = useStreamStore((state) => state.activeRunId);
-  const features = useStreamStore((state) => state.features);
-  const baseline = runs.find((run) => run.id === baselineId);
-  const steered = runs.find(
-    (run) => run.id === activeId && Object.keys(run.clamps).length > 0,
+  const baselineStatus = useStreamStore(
+    (state) => state.runs.find((run) => run.id === baselineId)?.status,
+  );
+  const steeredId = useStreamStore((state) => {
+    const run = state.runs.find((item) => item.id === activeId);
+    return run && Object.keys(run.clamps).length > 0 ? run.id : undefined;
+  });
+  const steeredStatus = useStreamStore(
+    (state) => state.runs.find((run) => run.id === steeredId)?.status,
   );
   const ready =
-    !!baseline &&
-    !!steered &&
-    baseline.id !== steered.id &&
-    baseline.status === "done" &&
-    steered.status === "done";
+    !!baselineId &&
+    !!steeredId &&
+    baselineId !== steeredId &&
+    baselineStatus === "done" &&
+    steeredStatus === "done";
   const [dismissedRunId, setDismissedRunId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
-  const open = ready && (manualOpen || steered?.id !== dismissedRunId);
-  const diff = useMemo(
-    () =>
-      baseline && steered && ready
-        ? wordDiff(words(baseline), words(steered))
-        : null,
-    [baseline, steered, ready],
-  );
-  const label = steered
-    ? Object.entries(steered.clamps)
-        .map(
-          ([id, value]) =>
-            `${features[id]?.label ?? id} ${value > 0 ? "+" : ""}${value.toFixed(1)}`,
-        )
-        .join(", ")
-    : "";
+  const open = ready && (manualOpen || steeredId !== dismissedRunId);
+  // Runs are immutable once status is "done", so it's safe to read them out
+  // of the store directly here (a snapshot, not a subscription) instead of
+  // subscribing to their token/flag arrays.
+  const comparison = useMemo(() => {
+    if (!ready || !baselineId || !steeredId) return null;
+    const { runs, features } = useStreamStore.getState();
+    const baseline = runs.find((run) => run.id === baselineId);
+    const steered = runs.find((run) => run.id === steeredId);
+    if (!baseline || !steered) return null;
+    const label = Object.entries(steered.clamps)
+      .map(
+        ([id, value]) =>
+          `${features[id]?.label ?? id} ${value > 0 ? "+" : ""}${value.toFixed(1)}`,
+      )
+      .join(", ");
+    return { baseline, steered, diff: wordDiff(words(baseline), words(steered)), label };
+  }, [ready, baselineId, steeredId]);
+  const diff = comparison?.diff ?? null;
+  const label = comparison?.label ?? "";
   return (
     <>
       <Button
@@ -134,7 +147,7 @@ export function RunCompare() {
         open={open}
         onOpenChange={(value) => {
           setManualOpen(value);
-          if (!value && steered) setDismissedRunId(steered.id);
+          if (!value && steeredId) setDismissedRunId(steeredId);
         }}
       >
         <DialogContent className="sm:max-w-5xl">
@@ -153,7 +166,7 @@ export function RunCompare() {
                     Baseline
                   </h3>
                   <p className="mb-3 font-mono text-xs">
-                    {baseline!.flags.length} flags
+                    {comparison!.baseline.flags.length} flags
                   </p>
                   <DiffText
                     words={diff.a}
@@ -166,7 +179,7 @@ export function RunCompare() {
                     Steered: {label}
                   </h3>
                   <p className="mb-3 font-mono text-xs">
-                    {steered!.flags.length} flags
+                    {comparison!.steered.flags.length} flags
                   </p>
                   <DiffText
                     words={diff.b}

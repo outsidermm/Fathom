@@ -1,5 +1,19 @@
 # Frontend roadmap: Fri 9:00 PM → Sat 12:00 AM (3 hours)
 
+> **Status: Phases 0-3 below are done and merged.** Phase 1 (theme/sea
+> primitives) landed in PR #4 (`samuel/frontend-phases-review`); Phase 2/3
+> (feature map, legend, diagnostics feed, feature search) landed in PR #7
+> (`hari/p3-demo`); the Phase 3 stretch goal (first-visit coach marks) landed
+> in PR #8 (`samuel/coach-marks`); and further UI polish landed in PR #9
+> (`kareem/ui-refinements-1`). The backend has since moved beyond this
+> roadmap's plan too — PR #3 (`xjm/av-impl`) added the live NLA "AV"
+> checkpoint-reading stream described in `docs/api-contract.md`, which this
+> document's Phase-2 "contract asks" (§6) predate and don't reflect. Treat
+> everything below as the historical plan that got this far, not the
+> in-progress state of the app; `README.md`'s Status section and
+> `docs/api-contract.md` are the current source of truth for what's actually
+> built today.
+
 **Owners:** Samuel (Surface: theme, app shell, state) · Hari (the Deep:
 feature map, sea decorations). Swap the names if the split fits better the
 other way. The split is by *file ownership*, so two Codex sessions never

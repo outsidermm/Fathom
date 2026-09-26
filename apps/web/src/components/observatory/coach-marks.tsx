@@ -9,18 +9,18 @@ const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 const steps = [
   {
-    title: "This is the model's mind",
-    body: "The map shows the concepts active in a model response.",
+    title: "Explore the observatory",
+    body: "Live Qwen answers appear below. The feature map is waiting for activation data.",
     target: "map",
   },
   {
     title: "Click a glowing feature",
-    body: "Pick a bright dot to see the concept it represents.",
+    body: "When activation data is connected, select a dot to inspect its activity.",
     target: "map",
   },
   {
     title: "Clamp it and rerun",
-    body: "Change a feature's strength, then compare the next answer.",
+    body: "Steering is not connected yet. These controls will let you compare answers once it is available.",
     target: "controls",
   },
 ] as const;

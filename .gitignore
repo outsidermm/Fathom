@@ -7,8 +7,11 @@ apps/api/.pytest_cache/
 
 # env
 .env
-apps/api/.env
-apps/web/.env*.local
+.env.*
+!.env.example
+secrets.env
+*.pem
+*.key
 
 # OS
 .DS_Store

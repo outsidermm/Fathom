@@ -209,8 +209,9 @@ over its sentence end: each matched its own section's keywords better than
 the next section's in 14–15 of 15 cases. Every reading, whatever the sampling
 point, opened with a genre-level sentence ("structured article format with
 numbered steps") and often added invented specifics (a Honda, a visa
-interview). The UI therefore leads with the detail sentence; nothing in the
-pipeline verifies it.
+interview). The contract therefore asks the UI to lead with the detail sentence;
+`apps/web` does not yet display AV events. Nothing in the pipeline verifies
+the interpretation.
 
 ## Production: expose Qwen and the sidecar through Runpod's proxy
 

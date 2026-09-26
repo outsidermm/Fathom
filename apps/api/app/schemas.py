@@ -10,6 +10,8 @@ from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
+# Reserved model value shared with the disabled frontend option. The current
+# WebSocket handler explicitly rejects it; only qwen2.5-7b is connected.
 Model = Literal["gemma-2b", "qwen2.5-7b"]
 Signature = Literal["hedging", "refusal", "unsupported"]
 StreamState = Literal["idle", "streaming", "inspecting", "done", "error"]
@@ -80,6 +82,11 @@ class ActivationEvent(BaseModel):
     feature_id: str
     value: float = Field(ge=0.0, le=1.0)
     coords: Coords
+    # Not emitted by the current backend (see the "Planned only" note on this
+    # event in docs/api-contract.md), but declared here to match
+    # apps/web/src/lib/contract.ts and the fields feature-inspector.tsx /
+    # diagnostics-feed.tsx already read off "activation" events.
+    explanation: Optional[str] = None
 
 
 class FlagEvent(BaseModel):

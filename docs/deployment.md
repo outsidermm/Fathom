@@ -4,12 +4,13 @@ The deployment target is **one Vercel project and domain** from
 `outsidermm/HackGT-13`, with `apps/web` (Next.js) and `apps/api` (FastAPI)
 as separate services. Qwen inference stays on James's Runpod GPU Pod.
 These are setup instructions for the account owner; this branch does not
-create or deploy a Vercel project. Review `kareem/vercel-deploy` before any
-production promotion or merge.
+create or deploy a Vercel project. Review the root configuration before any
+production promotion. The deployment configuration has landed on main;
+account access and hosted streaming still require account-owner verification.
 
 ## What Vercel currently documents
 
-Official documentation checked on **2026-09-25**:
+Official documentation rechecked on **2026-09-26**:
 
 - [Services overview](https://vercel.com/docs/services): Services is in beta
   on all plans. Services build independently, share a deployment/domain and
@@ -73,8 +74,16 @@ no internal service binding is needed for this client flow.
    | `QWEN_API_KEY` | Bearer secret for that endpoint, if required |
    | `QWEN_MODEL` | `qwen2.5-7b` (code default) |
    | `CORS_ORIGINS` | Exact allowed HTTP origins when cross-origin access is needed, comma-separated without spaces or trailing slash |
+   | `AV_API_BASE` | The Runpod AV sidecar's reachable HTTPS URL (see [runpod-inference.md](runpod-inference.md)); code default `http://127.0.0.1:30003` is loopback-only and must be overridden for hosted use |
+   | `AV_API_KEY` | Bearer secret for the AV sidecar, if required |
    | `NEXT_PUBLIC_API_BASE` | **Empty string**, explicitly set |
    | `NEXT_PUBLIC_WS_URL` | `/ws/stream` |
+
+   `AV_HOLD_TIMEOUT` (default `4.0` seconds) and `AV_CONCURRENCY` (default `3`)
+   are optional tuning knobs read by `qwen_stream.py`; see
+   [api-contract.md](api-contract.md) for their behavior. `NEXT_PUBLIC_STEERING_ENABLED`
+   (default `false`) is a frontend-only flag; leave it `false` until a backend
+   accepts `clamp`/`reset_clamps`.
 
    For the Vercel UI, enter an actual empty value for `NEXT_PUBLIC_API_BASE`,
    not literal quote characters. In a dotenv file the equivalent is:
@@ -104,7 +113,7 @@ localhost**, even on Vercel, so explicitly set both hosted values above.
 `/api/health`. Setting it to `/api` would duplicate the prefix when constructing
 an API route. There is no need for a fixed public origin in this setup.
 
-The existing hook passes `WS_URL` to the browser's `new WebSocket(...)`.
+The stream store passes `WS_URL` to the browser's `new WebSocket(...)`.
 The [WebSocket constructor](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket)
 accepts relative URLs and resolves HTTPS to WSS. `/ws/stream` therefore follows
 this deployment's domain on both Preview and Production. An explicit
@@ -115,8 +124,13 @@ keep the localhost values for separate `npm run dev` and Uvicorn servers.
 Same-origin browser HTTP requests do not require cross-origin CORS permissions.
 `CORS_ORIGINS` still configures **HTTP CORSMiddleware only**. `/ws/stream`
 currently accepts **any origin**, including requests without an `Origin`
-header, and has **no application authentication**. This migration preserves
+header, and has **no application authentication or generation rate limiting**. This migration preserves
 that behavior; CORS is not an access restriction on Qwen generation.
+`AV_CONCURRENCY` limits one run only. Multiple sockets each create their own
+Qwen stream and AV semaphore. Provider-side admission controls are not
+verified here; choose generation limits before public promotion. Vercel
+[WebSocket firewall rules](https://vercel.com/docs/functions/websockets#request-lifecycle)
+apply to upgrades, not each subsequent `start` message.
 
 ## 2. Fallback if Services Beta is unavailable
 
@@ -127,7 +141,8 @@ Services config as if it were standalone:
 1. Import two Vercel projects with roots `apps/api` (FastAPI) and `apps/web`
    (Next.js). The older `apps/api/vercel.json` enables Fluid Compute and sets
    the API's `app/main.py` duration to 300 seconds.
-2. Set `QWEN_API_BASE`, `QWEN_API_KEY`, `QWEN_MODEL`, and `CORS_ORIGINS` in the
+2. Set `QWEN_API_BASE`, `QWEN_API_KEY`, `QWEN_MODEL`, `AV_API_BASE`,
+   `AV_API_KEY`, and `CORS_ORIGINS` in the
    API project. For HTTP CORS, allow the frontend's exact origin.
 3. Set these in the web project and rebuild:
 
@@ -219,13 +234,14 @@ exceed our 300s limit. This is arithmetic, not a measured throughput claim.
 
 **Connection age also matters:** Vercel closes sockets at the Function duration
 limit, even when idle. `ws_stream` stays open after `done` or `stop`, and the
-frontend opens a socket when the page mounts. Waiting on the page or running
-multiple prompts consumes the same 300s lifetime; a later prompt may be cut off.
-The current `use-activation-stream.ts` only sets `connected=false` on close;
-it does **not** reconnect or resume, despite the contract's intended fresh-run
-reconnect flow. A page reload opens a new connection. Implementing reconnect
-handling is a follow-up before relying on long-lived demo tabs. A reconnect
-cannot restore a partially completed run with the present contract.
+frontend opens a socket when the page mounts. Waiting before the first prompt
+consumes that socket’s 300s lifetime, so the first run can be cut off sooner
+than expected. The frontend replaces the socket for subsequent runs.
+The current `src/lib/stream-store.ts` reconnects after 0.5s, 1s, 2s, 4s,
+then at most 8s between attempts. It marks an interrupted run as failed;
+it does not automatically restart or resume generation. Once connected,
+press Run or Rerun to begin again. Successive runs deliberately use a fresh
+socket to isolate late events until the protocol has server run IDs.
 
 For the account-owner validation, measure complete cold and warm 512-token
 runs, test concurrent requests, and leave a tab open past 300s to observe the
@@ -256,8 +272,10 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 The root `.env.example` documents local defaults and hosted substitutions.
-The API reads process environment variables; it does not automatically load
-that file. Export any overrides before starting Uvicorn. For the frontend,
+The API loads `apps/api/.env` automatically via `python-dotenv`; already
+exported environment variables take precedence. It does not load the root
+`.env.example` or root `.env`. Export overrides or put backend values in
+`apps/api/.env` before starting Uvicorn. For the frontend,
 copy `apps/web/.env.example` to `apps/web/.env.local` as in the README.
 
 For a unified local route surface, the Services docs also describe
@@ -271,6 +289,18 @@ Run the existing API suite from `apps/api`:
 python -m unittest discover -s tests -v
 ```
 
-It checks SSE parsing, upstream error reporting, and the browser WebSocket
-bridge with a mocked model stream. It does not exercise Vercel's runtime or
+Use Python 3.12, matching `.python-version` and the retained Docker image.
+The suite checks SSE parsing, AV checkpoints, upstream failures, WebSocket
+validation/cancellation, and configured HTTP CORS versus permissive WebSocket
+origins with mocked model transports. It does not exercise Vercel's runtime or
 live Qwen latency.
+
+Frontend checks (Node 22.18+ or 24 for native TypeScript test imports):
+
+```bash
+cd apps/web
+npm test
+npx tsc --noEmit
+npx eslint .
+npm run build
+```
