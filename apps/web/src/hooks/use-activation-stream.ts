@@ -31,13 +31,12 @@ export interface FlagEntry {
 }
 
 /**
- * Owns the websocket connection described in docs/api-contract.md.
- * Points at the mock API by default (apps/api/app/mock_stream.py) —
- * swap nothing here when the real model pipeline lands, only the
- * server-side implementation behind the same contract.
+ * Owns the legacy WebSocket used for live Qwen text and placeholder features.
+ * The conversation protocol in docs/api-contract.md is a future migration.
  */
 export function useActivationStream() {
   const [status, setStatus] = useState<StreamState>("idle");
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [tokens, setTokens] = useState<TokenEntry[]>([]);
   const [activations, setActivations] = useState<ActivationEntry[]>([]);
   const [flags, setFlags] = useState<FlagEntry[]>([]);
@@ -57,6 +56,7 @@ export function useActivationStream() {
       switch (msg.type) {
         case "status":
           setStatus(msg.state);
+          setStatusMessage(msg.message ?? null);
           break;
         case "token":
           setTokens((prev) => [...prev, { index: msg.index, text: msg.text }]);
@@ -97,6 +97,7 @@ export function useActivationStream() {
       setTokens([]);
       setActivations([]);
       setFlags([]);
+      setStatusMessage(null);
       send({ type: "start", prompt, model });
     },
     [send]
@@ -110,5 +111,5 @@ export function useActivationStream() {
   const resetClamps = useCallback(() => send({ type: "reset_clamps" }), [send]);
   const stop = useCallback(() => send({ type: "stop" }), [send]);
 
-  return { status, connected, tokens, activations, flags, start, clamp, resetClamps, stop };
+  return { status, statusMessage, connected, tokens, activations, flags, start, clamp, resetClamps, stop };
 }

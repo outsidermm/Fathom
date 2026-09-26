@@ -28,12 +28,12 @@ const SIGNATURE_LABEL: Record<string, string> = {
  */
 export function Observatory() {
   const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState<Model>("gemma-2b");
+  const [model, setModel] = useState<Model>("qwen2.5-7b");
   const [clampedIds, setClampedIds] = useState<Set<string>>(new Set());
-  const { status, connected, tokens, activations, flags, start, clamp, resetClamps } =
+  const { status, statusMessage, connected, tokens, activations, flags, start, clamp, resetClamps } =
     useActivationStream();
 
-  const text = useMemo(() => tokens.map((t) => t.text).join(" "), [tokens]);
+  const text = useMemo(() => tokens.map((t) => t.text).join(""), [tokens]);
 
   // The actual steering interaction from the pitch: click a feature in the
   // map, clamp it, regenerate from the same prompt, watch the output change.
@@ -79,7 +79,7 @@ export function Observatory() {
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">prompt</CardTitle>
-            <CardDescription>status: {status}</CardDescription>
+            <CardDescription>status: {status}{statusMessage && ` — ${statusMessage}`}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             <Input
@@ -93,16 +93,18 @@ export function Observatory() {
                 value={model}
                 onChange={(e) => setModel(e.target.value as Model)}
               >
-                <option value="gemma-2b">gemma-2b</option>
+                <option value="gemma-2b" disabled>gemma-2b (not connected)</option>
                 <option value="qwen2.5-7b">qwen2.5-7b</option>
               </select>
               <Button size="sm" onClick={() => start(prompt, model)} disabled={!connected}>
                 run
               </Button>
             </div>
-            <Button size="sm" variant="outline" onClick={handleResetClamps}>
-              reset clamps {clampedIds.size > 0 && `(${clampedIds.size})`}
-            </Button>
+            {clampedIds.size > 0 && (
+              <Button size="sm" variant="outline" onClick={handleResetClamps}>
+                reset clamps ({clampedIds.size})
+              </Button>
+            )}
           </CardContent>
         </Card>
 
@@ -223,7 +225,7 @@ function FeatureMap({
       </svg>
       {activations.length === 0 && (
         <p className="absolute text-sm text-neutral-500">
-          run a prompt to see features fire
+          Live answers are connected. The activation map is coming next.
         </p>
       )}
     </div>
