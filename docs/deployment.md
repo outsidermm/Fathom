@@ -248,20 +248,9 @@ runs, test concurrent requests, and leave a tab open past 300s to observe the
 close behavior. No hosted timing or WebSocket smoke test has been performed
 by this branch.
 
-## Deferred infrastructure and retained files
-
-**Hosted Postgres is deferred.** Nothing reads `DATABASE_URL`; do not provision
-it on Vercel or add an integration for this migration. The local compose
-service and optional example variable remain for future persistence work.
-
-[`render.yaml`](../render.yaml) and
-[`apps/api/Dockerfile`](../apps/api/Dockerfile) remain unchanged as the previous
-Render deployment path. The API service uses the FastAPI preset and Python
-dependencies; it does not use that Blueprint or Docker image in this setup.
-
 ## Local development and tests
 
-Phase 0 in [frontend-roadmap.md](frontend-roadmap.md) still works unchanged:
+Run the API locally:
 
 ```bash
 cd apps/api
@@ -280,7 +269,7 @@ copy `apps/web/.env.example` to `apps/web/.env.local` as in the README.
 
 For a unified local route surface, the Services docs also describe
 `vercel dev -L` from the repository root (no cloud authentication). Use the
-relative hosted web variables for that mode. The separate-server Phase 0
+relative hosted web variables for that mode. The separate-server
 workflow above remains unchanged.
 
 Run the existing API suite from `apps/api`:
@@ -289,7 +278,7 @@ Run the existing API suite from `apps/api`:
 python -m unittest discover -s tests -v
 ```
 
-Use Python 3.12, matching `.python-version` and the retained Docker image.
+Use Python 3.12, matching `.python-version` and CI.
 The suite checks SSE parsing, AV checkpoints, upstream failures, WebSocket
 validation/cancellation, and configured HTTP CORS versus permissive WebSocket
 origins with mocked model transports. It does not exercise Vercel's runtime or

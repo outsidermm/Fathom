@@ -31,9 +31,7 @@ The NLA models and inference client are upstream work by
 apps/web/    Next.js + TypeScript + shadcn/ui frontend
 apps/api/    FastAPI backend — live Qwen text + AV checkpoints; feature-map events pending
 docs/        API contract, Runpod runbook, deployment guide, orchestration design
-docker-compose.yml   Postgres (local dev)
 vercel.json  Vercel Services — web + API on one domain, API duration 300s
-render.yaml  Previous Render Blueprint (retained alongside apps/api/Dockerfile)
 ```
 
 ## Cloud checks and deployment
@@ -86,13 +84,6 @@ Open http://localhost:3000, type a prompt, and press run. With the A100 and
 SSH tunnel active, the answer streams from Qwen. The activation map and
 steering are still pending; the UI does not claim they are live.
 
-**Postgres** (not wired into the API yet — bring it up once you know what
-you're persisting):
-
-```bash
-docker compose up -d
-```
-
 ## Deployed
 
 Follow [`docs/deployment.md`](docs/deployment.md) to create one Vercel project
@@ -115,8 +106,7 @@ Services uses Fluid Compute by default; the API has a 300-second connection
 limit. Long generations or idle tabs can hit that limit; the current frontend
 reconnects automatically with backoff. Interrupted runs are not resumed; press
 Run or Rerun after reconnection to start again. See the deployment guide for plan
-limits and validation steps. Hosted Postgres is deferred; nothing reads
-`DATABASE_URL` yet. Deployment requires a Vercel account with repo access
+limits and validation steps. Deployment requires a Vercel account with repo access
 and Services Beta availability; the guide documents the two-project fallback.
 
 ## Status
@@ -124,8 +114,7 @@ and Services Beta availability; the guide documents the two-project fallback.
 - [x] Repo scaffolded; frontend production build/typecheck/lint and API tests pass
 - [x] Current WebSocket with a tested live Qwen text bridge and replayed AV checkpoints
 - [ ] Consume and display `av`, `av_error`, and `status: inspecting` in the frontend
-- [x] Vercel configuration and guide for frontend + API; previous Dockerfile
-      and Render Blueprint retained (`docs/deployment.md`)
+- [x] Vercel configuration and guide for frontend + API (`docs/deployment.md`)
 - [ ] Validate hosted Qwen streaming and WebSocket duration/reconnect behavior
 - [x] Runpod public proxy setup and authenticated service launch scripts documented
       (`docs/runpod-inference.md`); verify current Pod reachability before the demo
