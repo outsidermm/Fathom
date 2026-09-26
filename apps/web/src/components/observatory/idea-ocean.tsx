@@ -30,7 +30,10 @@ export function IdeaOcean({ paused }: { paused: boolean }) {
   const current = observed.at(-1);
   const earlier = observed.slice(0, -1).slice(-4);
   const selected = ordered.find((reading) => reading.checkpointId === selectedCheckpoint) ?? current;
-  const alternatives = current?.alternatives ?? [];
+  // Suggestions can finish after the next reading; keep the newest available
+  // set visible and name the checkpoint it belongs to.
+  const suggestionSource = observed.findLast((reading) => reading.alternatives?.length);
+  const alternatives = suggestionSource?.alternatives ?? [];
 
   function guide(text: string) {
     if (connection !== "open") {
@@ -106,10 +109,10 @@ export function IdeaOcean({ paused }: { paused: boolean }) {
           </div>
 
           <div className={styles.alternatives} aria-label="Suggested directions">
-            <span className={styles.groupLabel}>Other possible directions</span>
+            <span className={styles.groupLabel}>Other possible directions{suggestionSource ? ` · ${suggestionSource.label}` : ""}</span>
             {alternatives.length ? alternatives.map((alternative) => (
               <button
-                key={`${current?.checkpointId}-${alternative.id}`}
+                key={`${suggestionSource?.checkpointId}-${alternative.id}`}
                 type="button"
                 className={`${styles.bubble} ${styles.optionBubble}`}
                 onClick={() => guide(`${alternative.focus}. ${alternative.detail}`)}
