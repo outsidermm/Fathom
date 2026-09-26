@@ -7,6 +7,7 @@ import { FeatureMap } from "./feature-map/feature-map";
 import type { MapFeature } from "./feature-map/fake-activation-bus";
 import { FeatureSearch } from "./feature-search";
 import { DiagnosticsFeed } from "./diagnostics-feed";
+import { IdeaOcean } from "./idea-ocean";
 import styles from "./connected-deep.module.css";
 
 const EMPTY_FEATURES: readonly MapFeature[] = [];
@@ -88,6 +89,10 @@ export function ConnectedFeatureMap({ paused }: { paused: boolean }) {
     observer.observe(container);
     return () => observer.disconnect();
   }, [paused]);
+
+  if (features.length === 0) {
+    return <div data-coach-target="map" className={styles.host}><IdeaOcean paused={paused} /></div>;
+  }
 
   return <div ref={host} data-coach-target="map" className={`${styles.host} ${paused ? styles.paused : ""}`}>
     <div data-live-map inert={paused} className={styles.live}>

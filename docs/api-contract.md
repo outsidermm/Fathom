@@ -3,11 +3,13 @@
 This is the shared source of truth so `apps/web` (Samuel, Hari) and `apps/api`
 (Kareem, James) can build in parallel without waiting on each other. The API
 currently streams **live Qwen text** and up to six checkpointed NLA AV
-interpretations while delivering the answer. Activation-map events, flags, and steering are planned; `/api/features`
-still returns placeholder data. The frontend should not present those
-placeholders as model internals. **Integration gap:** `apps/web` currently
-handles tokens and planned map/flag events, but drops `av`, `av_error`, and
-`status: inspecting`; a typed event is not yet a visible interpretation.
+interpretations while delivering the answer. Activation-map events, flags, and
+activation steering are planned; `/api/features` still returns placeholder data.
+The frontend should not present those placeholders as model internals. It shows
+`av` checkpoint readings and `av_alternatives` suggestions as separate idea
+bubbles in the ocean. Choosing a suggestion or writing a direction starts a
+**new answer** via `start` with the original task and that direction in its prompt.
+This is prompt-level guidance, not activation steering or a continuation of the old answer.
 
 If you change a shape here, update both `apps/api/app/schemas.py` (Pydantic)
 and `apps/web/src/lib/contract.ts` (TypeScript) in the same commit.
