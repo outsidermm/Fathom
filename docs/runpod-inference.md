@@ -2,8 +2,8 @@
 
 This runbook covers the persistent model files, the tested Qwen text stream,
 and the first AV integration. The browser WebSocket relays Qwen answer text and
-one AV explanation of a replayed answer token's block-20 residual. Live
-per-token capture, AV/AR orchestration, and steering remain integration work.
+up to six asynchronous AV explanations of replayed block-20 checkpoints.
+Live per-token capture, AV/AR orchestration, and steering remain integration work.
 See [orchestration.md](orchestration.md) for that work and
 [target-harness-contract.md](target-harness-contract.md) for the possible
 post-hackathon browser protocol (not built this weekend — see
@@ -116,15 +116,17 @@ Pod loopback and reach it through SSH. The browser talks only to FastAPI.
 
 For the current end-to-end AV path, run Qwen on 30001 with its reduced cache
 reservation, the NLA AV SGLang server on 30002, and the Qwen replay + NLA
-client sidecar on 30003. The replay regenerates the hidden state from the
-completed answer text and samples the last token containing letters or digits.
+client sidecar on 30003. Each replay regenerates the hidden state from the
+answer prefix available at its checkpoint and samples the last token containing
+letters or digits.
 Its tokenization can differ from SGLang's original token IDs. Treat the
 explanation as approximate, not a transcript.
 The upstream example specifies `hidden_states[21]` for the output of Qwen
 block 20. The sidecar code is `apps/api/pod/av_sidecar.py`.
 
-On this A100, start Qwen with `--mem-fraction-static 0.40`, then AV with
-`--mem-fraction-static 0.50`, then the GPU replay sidecar. The parameter is
+On this A100, start Qwen with `--mem-fraction-static 0.40`, then the GPU
+replay sidecar, then AV with `--mem-fraction-static 0.60` and CUDA graphs;
+`apps/api/pod/start_services.sh` does this in order. The parameter is
 applied to the free GPU memory when each server starts, not to the entire
 card. Watch `nvidia-smi` and adjust only after checking the current
 allocation. Run the AV server with
@@ -191,7 +193,8 @@ uvicorn app.main:app --reload --port 8000
 In another terminal, check `curl -fsS http://127.0.0.1:8000/api/health`.
 This starts the FastAPI bridge on port 8000; it does not launch SGLang or load
 the models locally. With a running A100 and SSH tunnel, `/ws/stream` carries
-real Qwen text and one AV explanation when both sidecar and tunnel are ready.
+real Qwen text and checkpoint-linked AV explanations when both sidecar and
+tunnel are ready.
 `/api/features` remains placeholder data, and AR and steering are not
 connected. Use `--reload` only for local development; it can
 restart the API during a model session. The browser should connect to FastAPI,
