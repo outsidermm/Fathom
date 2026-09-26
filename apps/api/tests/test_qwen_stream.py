@@ -629,17 +629,34 @@ class WebSocketBridgeTests(unittest.TestCase):
         self.assertEqual("".join(e["text"] for e in events if e["type"] == "token"), "Hello world")
         self.assertEqual(events[-1]["state"], "done")
 
-    def test_steer_is_acknowledged_without_ending_the_run(self) -> None:
+    def test_steer_for_an_unknown_run_is_refused_without_ending_anything(self) -> None:
         with TestClient(app) as client:
             with client.websocket_connect("/ws/stream") as websocket:
                 websocket.receive_json()  # idle
-                websocket.send_json({"type": "steer", "checkpoint_id": 2, "alternative_id": 1})
+                websocket.send_json({"type": "steer", "run_id": "gone", "checkpoint_id": 2, "alternative_id": 1})
                 self.assertEqual(websocket.receive_json(), {
-                    "type": "steer_ack", "checkpoint_id": 2, "alternative_id": 1,
-                    "applied": False, "message": "Steering is not connected yet",
+                    "type": "steer_ack", "checkpoint_id": 2, "alternative_id": 1, "applied": False,
+                    "message": "That run is no longer available to steer", "run_id": "gone",
                 })
-                websocket.send_json({"type": "steer", "checkpoint_id": 2, "alternative_id": 5})
+                websocket.send_json({"type": "steer", "run_id": "gone", "checkpoint_id": 2, "alternative_id": 5})
                 self.assertEqual(websocket.receive_json()["state"], "error")
+
+    def test_run_events_carry_the_run_id_from_start(self) -> None:
+        with patch("app.qwen_stream.qwen_deltas", streaming("Hello")), \
+                patch("app.qwen_stream._request_av", no_av):
+            with TestClient(app) as client:
+                with client.websocket_connect("/ws/stream") as websocket:
+                    websocket.receive_json()  # idle
+                    websocket.send_json({"type": "start", "prompt": "Hi", "model": "qwen2.5-7b", "run_id": "r1"})
+                    events = []
+                    while not events or events[-1].get("state") not in ("done", "error"):
+                        events.append(websocket.receive_json())
+        self.assertTrue(all(event["run_id"] == "r1" for event in events))
+
+
+async def no_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None, steers=None) -> dict:
+    return {"type": "av_error", "message": "AV unavailable: test", "checkpoint_id": checkpoint_id,
+            "position": checkpoint.position, "label": checkpoint.label}
 
 
 if __name__ == "__main__":

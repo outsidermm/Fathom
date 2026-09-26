@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import uuid
+from collections import OrderedDict
 from contextlib import suppress
 from pathlib import Path
 
@@ -18,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
 from .mock_stream import FEATURES
-from .qwen_stream import run_qwen_stream
+from .qwen_stream import RunState, run_qwen_stream
 from .schemas import (
     ClampMessage,
     Feature,
@@ -30,11 +32,15 @@ from .schemas import (
     SteerMessage,
     StopMessage,
 )
+from .steer import run_steer
 
 # apps/api/.env; variables already set in the shell take precedence.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 app = FastAPI(title="Interpretability Observatory API")
+
+# Runs a socket keeps so they can be steered (and re-steered) afterwards.
+_KEPT_RUNS = 32
 
 _origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
@@ -60,6 +66,12 @@ async def ws_stream(websocket: WebSocket) -> None:
     await websocket.accept()
     run_task: asyncio.Task | None = None
     send_lock = asyncio.Lock()
+    runs: OrderedDict[str, RunState] = OrderedDict()
+
+    def keep(state: RunState) -> None:
+        runs[state.run_id] = state
+        while len(runs) > _KEPT_RUNS:
+            runs.popitem(last=False)
 
     async def send(payload: dict) -> None:
         async with send_lock:
@@ -113,7 +125,15 @@ async def ws_stream(websocket: WebSocket) -> None:
                             StatusEvent(state="error", message="Only qwen2.5-7b is connected").model_dump(exclude_none=True)
                         )
                         continue
-                    run_task = asyncio.create_task(run_qwen_stream(msg.prompt, send, pace=msg.pace))
+                    state = RunState(run_id=msg.run_id or uuid.uuid4().hex, prompt=msg.prompt)
+                    keep(state)
+
+                    async def send_run(event: dict, run_id: str = state.run_id) -> None:
+                        await send({**event, "run_id": run_id})
+
+                    run_task = asyncio.create_task(
+                        run_qwen_stream(msg.prompt, send_run, pace=msg.pace, state=state)
+                    )
 
                 elif msg_type == "clamp":
                     ClampMessage.model_validate(raw)
@@ -129,12 +149,17 @@ async def ws_stream(websocket: WebSocket) -> None:
 
                 elif msg_type == "steer":
                     steer = SteerMessage.model_validate(raw)
-                    # Acknowledged only: status:error would end the client's run.
-                    await send(SteerAckEvent(
-                        checkpoint_id=steer.checkpoint_id,
-                        alternative_id=steer.alternative_id,
-                        message="Steering is not connected yet",
-                    ).model_dump(exclude_none=True))
+                    parent = runs.get(steer.run_id)
+                    if parent is None:
+                        # A refusal, not status:error, which would end the client's run.
+                        await send({**SteerAckEvent(
+                            checkpoint_id=steer.checkpoint_id, alternative_id=steer.alternative_id,
+                            applied=False, message="That run is no longer available to steer",
+                        ).model_dump(exclude_none=True), "run_id": steer.run_id})
+                        continue
+                    # One generation at a time: a steer replaces whatever is streaming.
+                    await cancel_run()
+                    run_task = asyncio.create_task(run_steer(parent, steer, send, keep))
 
                 elif msg_type == "stop":
                     StopMessage.model_validate(raw)
