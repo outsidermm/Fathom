@@ -2,8 +2,8 @@
 
 This is the shared source of truth so `apps/web` (Samuel, Hari) and `apps/api`
 (Kareem, James) can build in parallel without waiting on each other. The API
-currently streams **live Qwen text** and one NLA AV interpretation after the
-answer. Activation-map events, flags, and steering are planned; `/api/features`
+currently streams **live Qwen text** and up to six checkpointed NLA AV
+interpretations during or after the answer. Activation-map events, flags, and steering are planned; `/api/features`
 still returns placeholder data. The frontend should not present those
 placeholders as model internals.
 
@@ -115,9 +115,30 @@ clamps.
   hedging/refusal/unsupported feature signatures early since the frontend
   needs a way to visually distinguish them. See `docs/design-system.md` §3
   for the `--alert` token and the map's color rules.
-- The current `av` event is one end-of-answer sample. Per-token activation
-  maps and steerable directions still require target-model hooks and a
-  separate implementation.
+- Readings come before the text they describe. In paced runs the display
+  stays 140 characters behind Qwen: the first reading ("Plan", `position` 0,
+  `sample: "prompt_end"`) is Qwen's state at the `<|im_start|>` token just
+  before the assistant header, before any answer text; each later one is read
+  at the end of a section's lead
+  (a numbered step's heading, a Markdown heading, or a prose sentence's first
+  clause) and shown before that section's text, which then streams. Never on
+  a bare list marker. Up to six readings: the plan, three consecutive
+  sections, then sections at least 300 characters apart. Every checkpoint gets
+  its own AV request (up to `AV_CONCURRENCY`, default 3, at once); none are
+  replaced or skipped. Holds last up to `AV_HOLD_TIMEOUT` (4 s). A Markdown
+  heading directly followed by a numbered step counts as one section.
+- Section phrases carry no foresight beyond the heading words: in
+  `apps/api/scripts/predict_eval.py` they matched the following section 82% of
+  the time, labeling the heading text without the AV 84%, and readings taken
+  before the heading words 44-51% (chance 50%). The plan matched its own answer
+  75% of the time (12 prompts). Present them as what the model's state showed
+  just before the text, not as foresight.
+- An AV reading that has not arrived once all answer text is out is cancelled
+  and not sent: AV output is not streamed, so it would appear detached from its
+  section. `status:done` is sent immediately with the `av_dropped` count. A
+  stopped run cancels all pending AV work.
+- These are replays of answer prefixes; exact generation activations and
+  steerable directions still require target-model hooks.
 
 ## Open asks for whoever owns the real backend (from the 11 PM sync)
 
