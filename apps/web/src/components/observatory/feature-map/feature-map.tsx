@@ -28,6 +28,7 @@ export interface FeatureMapProps {
   hoveredTokenIndex?: number | null;
   flags?: readonly MapFlag[];
   className?: string;
+  ambientPaused?: boolean;
 }
 
 function FeatureMapInner({
@@ -40,6 +41,7 @@ function FeatureMapInner({
   hoveredTokenIndex = null,
   flags = EMPTY_FLAGS,
   className = "",
+  ambientPaused = false,
 }: FeatureMapProps) {
   const instructionsId = useId();
   const tooltipId = useId();
@@ -394,9 +396,10 @@ function FeatureMapInner({
   }
 
   return (
-    <DeepViewport className={className}>
+    <DeepViewport className={className} paused={ambientPaused}>
       <div className={styles.map} onPointerMove={pointerMove} onPointerLeave={() => setHoveredId(null)}>
         <canvas
+          data-feature-map
           ref={canvasRef}
           className={styles.canvas}
           role="img"

@@ -42,7 +42,7 @@ export function Observatory() {
           <RunCompare />
         </div>
         <div className="grid min-h-[560px] flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
-          <div className="grid min-h-[560px] grid-rows-[minmax(350px,1fr)_auto_auto] gap-4">
+          <div className="grid content-start grid-rows-[auto_auto_auto] gap-4">
             <ConnectedFeatureMap paused={motionPaused} />
             <TokenStream />
             <AvReadings />

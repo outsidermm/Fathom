@@ -69,7 +69,7 @@ export function ConnectedFeatureMap({ paused }: { paused: boolean }) {
     if (!paused) return;
     const container = host.current;
     const image = frozen.current;
-    const live = container?.querySelector<HTMLCanvasElement>("[data-live-map] canvas");
+    const live = container?.querySelector<HTMLCanvasElement>("canvas[data-feature-map]");
     if (!container || !image || !live) return;
     image.width = live.width;
     image.height = live.height;
@@ -91,7 +91,7 @@ export function ConnectedFeatureMap({ paused }: { paused: boolean }) {
 
   return <div ref={host} data-coach-target="map" className={`${styles.host} ${paused ? styles.paused : ""}`}>
     <div data-live-map inert={paused} className={styles.live}>
-      <FeatureMap features={features} source={activationBus} activeRunId={runId}
+      <FeatureMap features={features} source={activationBus} activeRunId={runId} ambientPaused={paused}
         selectedFeatureId={selected} onSelectFeature={select} clamps={clamps}
         hoveredTokenIndex={hoveredToken} flags={flags} className="min-h-[350px] rounded-[20px]" />
     </div>
