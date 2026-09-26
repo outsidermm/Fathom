@@ -2,12 +2,23 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+function Card({
+  className,
+  variant = "paper",
+  ...props
+}: React.ComponentProps<"div"> & { variant?: "paper" | "plank" | "sea" }) {
   return (
     <div
       data-slot="card"
+      data-variant={variant}
       className={cn(
-        "flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
+        "relative flex flex-col gap-6 border-0 py-6 shadow-[0_10px_24px_rgb(80_49_32_/_0.18)]",
+        variant === "paper" &&
+          "rounded-[4px] bg-paper text-driftwood before:absolute before:left-1/2 before:top-2 before:size-2 before:-translate-x-1/2 before:rounded-full before:bg-coral before:shadow-[0_1px_2px_rgb(80_49_32_/_0.35)]",
+        variant === "plank" &&
+          "wood-grain rounded-[10px] text-driftwood shadow-[0_5px_0_var(--plank-dark)]",
+        variant === "sea" &&
+          "rounded-2xl bg-water text-ink",
         className
       )}
       {...props}
@@ -32,7 +43,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("leading-none font-semibold", className)}
+      className={cn("font-ui text-lg leading-tight font-bold text-harbor", className)}
       {...props}
     />
   );
