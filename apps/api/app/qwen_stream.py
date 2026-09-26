@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 
 import httpx
 
+from .av_text import clean_focus
 from .schemas import AVErrorEvent, AVEvent, StatusEvent, TokenEvent
 
 SendEvent = Callable[[dict], Awaitable[None]]
@@ -76,6 +77,61 @@ def _content_delta(payload: str) -> str:
         return ""
     content = choices[0].get("delta", {}).get("content")
     return content if isinstance(content, str) else ""
+
+
+_FOCUS_SYSTEM = (
+    "You label what a language model was doing, given an interpretability note "
+    "about its internal state. Reply with one phrase of 3 to 7 words that "
+    "starts with a lowercase -ing verb and names the specific topic, not just "
+    "the structure (not 'listing the next step'). Use only what the note says; "
+    "add no facts. "
+    "No quotes, no final period."
+)
+# Few-shot pairs taken from real AV readings of Qwen answers.
+_FOCUS_EXAMPLES = [
+    ('The sentence "When you start looking at cars, it\'s important to determine your '
+     'budget" introduces a financial question about price, listing budget considerations '
+     "like total cost or monthly payments.", "advising to determine a budget"),
+    ('The paragraph "consider your budget and determine what type of vehicle you need" '
+     "continues the personal assessment with questions about vehicle type, size, features.",
+     "weighing what type of vehicle fits"),
+    ('The phrase "def is_palindrome(s): This function checks if a given string s is a '
+     'palindrome" establishes the function\'s purpose and expects the implementation next.',
+     "defining the palindrome-checking function"),
+    ('The sentence ending "Consequences can include fines, legal penalties, and a criminal '
+     'record" is a closing clause about the seriousness of the act.',
+     "warning about legal consequences"),
+    ('The bullet "Step 3: Visit the dealership" signals the next section in a numbered list of '
+     "car-buying steps, likely covering test drives at the dealership.",
+     "planning a dealership visit"),
+]
+
+
+async def summarize_focus(note: str, *, client: httpx.AsyncClient | None = None) -> str | None:
+    """Compress an AV note into a short "-ing" phrase, or None.
+
+    Qwen sees only the AV's note, never the answer, so the phrase stays a label
+    of what the AV reported rather than a summary of the visible text.
+    """
+    url, model, headers = _qwen_endpoint()
+    messages = [{"role": "system", "content": _FOCUS_SYSTEM}]
+    for example, label in _FOCUS_EXAMPLES:
+        messages += [{"role": "user", "content": example}, {"role": "assistant", "content": label}]
+    messages.append({"role": "user", "content": note})
+    owns_client = client is None
+    if client is None:
+        client = httpx.AsyncClient(timeout=httpx.Timeout(10.0))
+    try:
+        response = await client.post(url, headers=headers, json={
+            "model": model, "messages": messages, "temperature": 0, "max_tokens": 20,
+        })
+        response.raise_for_status()
+        return clean_focus(response.json()["choices"][0]["message"]["content"], note)
+    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError):
+        return None
+    finally:
+        if owns_client:
+            await client.aclose()
 
 
 async def run_qwen_stream(
