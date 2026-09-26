@@ -39,12 +39,12 @@ async function setup(t, pacing) {
   return { sockets, state: store.useStreamStore.getState, unmount, store };
 }
 
-test('Stop cancels a queued rerun before its socket opens', async (t) => {
+test('Stop cancels a queued restart before its socket opens', async (t) => {
   const { sockets, state } = await setup(t);
   sockets[0].open();
   state().start('first', 'qwen2.5-7b');
   sockets[0].message({ type: 'status', state: 'done' });
-  state().rerun();
+  state().start('first', 'qwen2.5-7b');
   state().stop();
   sockets[1].open();
   assert.equal(sockets[1].sent.filter(m => m.type === 'start').length, 0);
@@ -56,7 +56,7 @@ test('failed connection does not replay a queued generation marked as error', as
   sockets[0].open();
   state().start('first', 'qwen2.5-7b');
   sockets[0].message({ type: 'status', state: 'done' });
-  state().rerun();
+  state().start('first', 'qwen2.5-7b');
   sockets[1].close();
   t.mock.timers.tick(500);
   sockets[2].open();

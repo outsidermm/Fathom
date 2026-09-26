@@ -3,10 +3,8 @@
  * Keep all three in sync when the contract changes.
  */
 
-// Reserved value shared with the disabled model-select option. The backend
-// explicitly rejects it; only qwen2.5-7b can start a generation.
-export type Model = "gemma-2b" | "qwen2.5-7b";
-export const MODEL_LABELS: Record<Model, string> = { "qwen2.5-7b": "Qwen 2.5 7B", "gemma-2b": "Gemma 2B" };
+export type Model = "qwen2.5-7b";
+export const MODEL_LABELS: Record<Model, string> = { "qwen2.5-7b": "Qwen 2.5 7B" };
 export type Signature = "hedging" | "refusal" | "unsupported";
 export type StreamState = "idle" | "streaming" | "inspecting" | "done" | "error";
 
@@ -23,8 +21,6 @@ export type ClientMessage =
   // pace (default true): hold text at each checkpoint until its AV reading arrives.
   // run_id is echoed on every event of the run.
   | { type: "start"; prompt: string; model: Model; pace?: boolean; run_id?: string }
-  | { type: "clamp"; feature_id: string; value: number } // -1..1
-  | { type: "reset_clamps" }
   | { type: "stop" }
   // Branch run_id at one of its readings (steer_ack, then branch).
   | ({ type: "steer"; run_id: string; checkpoint_id: number } & SteerDirection);

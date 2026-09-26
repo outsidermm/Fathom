@@ -42,12 +42,6 @@ test('escaped asterisks and decoded entities keep their visible content', () => 
   assert.doesNotMatch(html, /<em>|<strong>/);
 });
 
-test('a token spanning multiple formatting nodes gets one flag marker', () => {
-  const html = render(['one **bold** end']);
-  assert.equal((html.match(/data-token-flag="true"/g) ?? []).length, 1);
-  assert.equal(visible(html), 'one bold end');
-});
-
 test('model HTML is not rendered and unsafe Markdown URLs are filtered', () => {
   const html = render(['<script>alert(1)</script>\n\n[click](javascript:alert(1))']);
   assert.doesNotMatch(html, /<script|href="javascript:/);

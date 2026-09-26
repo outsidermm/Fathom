@@ -13,8 +13,6 @@ export function Legend() {
         <span>Strong</span>
       </div>
       <div className={styles.keys}>
-        <span><i className={styles.up} aria-hidden="true" />Clamped +</span>
-        <span><i className={styles.down} aria-hidden="true" />Clamped −</span>
         <span><b className={styles.alert} aria-hidden="true">⚠</b>Flagged</span>
       </div>
     </aside>

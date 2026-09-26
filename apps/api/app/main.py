@@ -22,10 +22,8 @@ from pydantic import ValidationError
 from .mock_stream import FEATURES
 from .qwen_stream import RunState, run_qwen_stream
 from .schemas import (
-    ClampMessage,
     Feature,
     HealthResponse,
-    ResetClampsMessage,
     StartMessage,
     StatusEvent,
     SteerAckEvent,
@@ -120,11 +118,6 @@ async def ws_stream(websocket: WebSocket) -> None:
                 if msg_type == "start":
                     msg = StartMessage.model_validate(raw)
                     await cancel_run()
-                    if msg.model != "qwen2.5-7b":
-                        await send(
-                            StatusEvent(state="error", message="Only qwen2.5-7b is connected").model_dump(exclude_none=True)
-                        )
-                        continue
                     state = RunState(run_id=msg.run_id or uuid.uuid4().hex, prompt=msg.prompt)
                     keep(state)
 
@@ -133,18 +126,6 @@ async def ws_stream(websocket: WebSocket) -> None:
 
                     run_task = asyncio.create_task(
                         run_qwen_stream(msg.prompt, send_run, pace=msg.pace, state=state)
-                    )
-
-                elif msg_type == "clamp":
-                    ClampMessage.model_validate(raw)
-                    await send(
-                        StatusEvent(state="error", message="Activation steering is not connected yet").model_dump(exclude_none=True)
-                    )
-
-                elif msg_type == "reset_clamps":
-                    ResetClampsMessage.model_validate(raw)
-                    await send(
-                        StatusEvent(state="error", message="Activation steering is not connected yet").model_dump(exclude_none=True)
                     )
 
                 elif msg_type == "steer":
@@ -173,8 +154,8 @@ async def ws_stream(websocket: WebSocket) -> None:
                         ).model_dump(exclude_none=True)
                     )
             except ValidationError as exc:
-                # Any message type can fail schema validation (e.g. a "clamp"
-                # with a value outside -1..1, or a missing required field) —
+                # Any message type can fail schema validation (e.g. a "steer"
+                # with alternative_id outside 0..2, or a missing required field) —
                 # this used to only be caught for "start", crashing the socket
                 # for every other message type.
                 await send(

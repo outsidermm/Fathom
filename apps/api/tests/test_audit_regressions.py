@@ -22,6 +22,7 @@ class MessageTests(unittest.TestCase):
         with TestClient(app) as client, client.websocket_connect('/ws/stream') as ws:
             ws.receive_json()
             for payload in ['{', 'null', '[]', '{"type":"clamp","value":2}',
+                            '{"type":"start","prompt":"hi","model":"gemma-2b"}',
                             '{"type":"start","prompt":" ","model":"qwen2.5-7b"}',
                             '{"type":"steer","checkpoint_id":-1,"alternative_id":1}',
                             '{"type":"steer","checkpoint_id":2,"alternative_id":5}',
@@ -37,14 +38,6 @@ class MessageTests(unittest.TestCase):
             })
             ws.send_json({'type': 'stop'})
             self.assertEqual(ws.receive_json(), {'type': 'status', 'state': 'idle'})
-
-    def test_unknown_feature_is_rejected_without_disconnect(self):
-        with TestClient(app) as client, client.websocket_connect('/ws/stream') as ws:
-            ws.receive_json()
-            ws.send_json({'type': 'clamp', 'feature_id': 'missing', 'value': 0.5})
-            event = ws.receive_json()
-            self.assertEqual(event, {'type': 'status', 'state': 'error',
-                                    'message': 'Activation steering is not connected yet'})
 
 
 class StreamRegressionTests(unittest.IsolatedAsyncioTestCase):

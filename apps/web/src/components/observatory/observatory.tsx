@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { TopBar } from "@/components/observatory/top-bar";
 import { PromptConsole } from "@/components/observatory/prompt-console";
 import { TokenStream } from "@/components/observatory/token-stream";
@@ -8,15 +8,7 @@ import { ConnectedFeatureMap } from "@/components/observatory/connected-deep";
 import { CoachMarks } from "@/components/observatory/coach-marks";
 import { ThoughtCurrent } from "@/components/observatory/thought-current/thought-current";
 import { mountStreamConnection, useStreamStore } from "@/lib/stream-store";
-
-// `?features=test` shows the fish-brain feature map with a fake layout.
-function useFeatureTestFlag() {
-  return useSyncExternalStore(
-    () => () => {},
-    () => new URLSearchParams(window.location.search).get("features") === "test",
-    () => false,
-  );
-}
+import { useFeatureTestFlag } from "@/lib/use-feature-test-flag";
 
 export function Observatory() {
   const [prompt, setPrompt] = useState("");

@@ -1,10 +1,42 @@
 # Interpretability Observatory — HackGT 13, Oracle of the Deep
 
-Live Qwen answers stream through the browser. The frontend has a canvas map,
-feature inspector, diagnostics, search, and run comparison ready for activation
-and steering events. Those events are still pending in the backend. The backend
-also emits replayed NLA AV checkpoint readings, but the frontend does not yet
-consume or display them.
+Watch Qwen2.5-7B answer while seeing summaries of its internal activations,
+and steer it mid-answer. Answers stream live from SGLang. Before each section,
+the browser shows an interpretation of Qwen's replayed layer-20 state from a
+Natural Language Autoencoder (NLA) activation verbalizer. Qwen also suggests
+2-3 other directions it could take. Click one, or type your own, and the answer
+branches from that point. The kept text stays, and a block-20 contrastive
+activation steer, anchored with the new section's opening, redirects what
+follows. Branches can be steered again.
+
+```
+browser (Next.js) ──ws──▶ FastAPI (apps/api)
+                              ├─▶ SGLang :30001   Qwen2.5-7B answer + helper calls
+                              └─▶ sidecar :30003  HF Qwen: replay, /contrast, /steer, /score
+                                     └─▶ SGLang :30002  NLA activation verbalizer (AV)
+```
+
+The 3D fish-brain feature map is ready for activation events (`?features=test`
+shows it with a test layout). The backend does not emit those events yet, and
+`/api/features` serves placeholder data.
+
+## Results
+
+In a live 43-case benchmark across 20 prompts, the steered branch reached its
+requested direction and ended within its token cap in 21 cases; an identical
+branch with the same anchored opening but no activation steer did so in 19.
+Re-prompting from the start succeeded in 22. Among the 16 cases where both
+steering and re-prompting succeeded, steering used a median 46% fewer generated
+tokens. The anchor-only branch saved a similar 47% on its 15 paired successes;
+steering used 3% more tokens than anchor-only on their 19 paired successes.
+These results support keeping the answer prefix at a checkpoint, but do not
+establish a separate token-saving benefit from the activation vector.
+
+This small, model-judged benchmark has multiple cases per prompt, asymmetric
+answer scoring, and many generations that hit the token cap. The steered timing
+also includes its AV readings and AR score, so the timing columns do not
+compare like-for-like latency. See the
+[full method, cases, and example outputs](docs/benchmarks/steer-tokens.md).
 
 ## Team
 
@@ -17,9 +49,7 @@ See `AGENTS.md` for frontend AI-assistant guidelines, `docs/api-contract.md`
 for the interface both sides build against, and
 [`docs/deployment.md`](docs/deployment.md) for the hosted Vercel/Runpod
 setup so the whole team (not just whoever has a tunnel open) can hit a live
-URL. Design: see [docs/design-system.md](docs/design-system.md). Samuel's
-frontend work follows the phases in
-[docs/frontend-roadmap.md](docs/frontend-roadmap.md).
+URL. Design: see [docs/design-system.md](docs/design-system.md).
 
 Repository owner and deployment documentation: [outsidermm](https://github.com/outsidermm).
 The NLA models and inference client are upstream work by
@@ -31,9 +61,7 @@ The NLA models and inference client are upstream work by
 apps/web/    Next.js + TypeScript + shadcn/ui frontend
 apps/api/    FastAPI backend — live Qwen text + AV checkpoints; feature-map events pending
 docs/        API contract, Runpod runbook, deployment guide, orchestration design
-docker-compose.yml   Postgres (local dev)
 vercel.json  Vercel Services — web + API on one domain, API duration 300s
-render.yaml  Previous Render Blueprint (retained alongside apps/api/Dockerfile)
 ```
 
 ## Cloud checks and deployment
@@ -65,8 +93,7 @@ uvicorn app.main:app --reload --port 8000
 Health check: `curl localhost:8000/api/health`
 This command runs the API locally. To get real Qwen output, start the A100
 model server and SSH tunnel described in [the inference runbook](docs/runpod-inference.md).
-Without them the WebSocket reports that Qwen is unavailable. Activation
-features and steering are not connected. The current
+Without them the WebSocket reports that Qwen is unavailable. The current
 [API contract](docs/api-contract.md) covers the WebSocket; the
 [conversation harness design](docs/target-harness-contract.md) is a possible
 future direction. For the planned path from live generation to explanation
@@ -83,15 +110,9 @@ npm run dev
 ```
 
 Open http://localhost:3000, type a prompt, and press run. With the A100 and
-SSH tunnel active, the answer streams from Qwen. The activation map and
-steering are still pending; the UI does not claim they are live.
-
-**Postgres** (not wired into the API yet — bring it up once you know what
-you're persisting):
-
-```bash
-docker compose up -d
-```
+SSH tunnel active, the answer streams from Qwen with live AV readings,
+alternatives, and steerable branches. The 3D activation map still uses
+placeholder data.
 
 ## Deployed
 
@@ -115,29 +136,26 @@ Services uses Fluid Compute by default; the API has a 300-second connection
 limit. Long generations or idle tabs can hit that limit; the current frontend
 reconnects automatically with backoff. Interrupted runs are not resumed; press
 Run or Rerun after reconnection to start again. See the deployment guide for plan
-limits and validation steps. Hosted Postgres is deferred; nothing reads
-`DATABASE_URL` yet. Deployment requires a Vercel account with repo access
+limits and validation steps. Deployment requires a Vercel account with repo access
 and Services Beta availability; the guide documents the two-project fallback.
 
 ## Status
 
 - [x] Repo scaffolded; frontend production build/typecheck/lint and API tests pass
 - [x] Current WebSocket with a tested live Qwen text bridge and replayed AV checkpoints
-- [ ] Consume and display `av`, `av_error`, and `status: inspecting` in the frontend
-- [x] Vercel configuration and guide for frontend + API; previous Dockerfile
-      and Render Blueprint retained (`docs/deployment.md`)
+- [x] Show AV readings, alternatives, and steered branches in the frontend
+- [x] Vercel configuration and guide for frontend + API (`docs/deployment.md`)
 - [ ] Validate hosted Qwen streaming and WebSocket duration/reconnect behavior
 - [x] Runpod public proxy setup and authenticated service launch scripts documented
       (`docs/runpod-inference.md`); verify current Pod reachability before the demo
-- [ ] Real activation events and steering in the current WebSocket contract
+- [x] Steering (`steer` → `branch`) in the current WebSocket contract
+- [ ] Real activation events for the feature map
 - [x] Download Qwen2.5-7B-Instruct, NLA AV, and NLA AR checkpoints to the
       Runpod Global volume; verify one AV random-vector smoke test
 - [x] Replay real Qwen layer-20 activations for experimental AV readings (runbook)
 - [ ] Original-generation activation capture and AR reconstruction validation
 - [ ] Real activation hooks replacing placeholder `/api/features` data
-- [x] Canvas feature map for planned activation events, with keyboard selection
-      and a frontend fixture verification of the full compare loop
-- [ ] Activation and steering integration against the live Qwen backend
+- [x] 3D fish-brain feature map for planned activation events, with keyboard selection
 - [ ] Failure-signature flagging (hedging/refusal/unsupported) tuned against
       the real model instead of the mock's keyword heuristic
 - [ ] Demo framing + video

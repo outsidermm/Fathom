@@ -4,11 +4,9 @@ This is the shared source of truth so `apps/web` (Samuel, Hari) and `apps/api`
 (Kareem, James) can build in parallel without waiting on each other. The API
 currently streams **live Qwen text**, up to six checkpointed NLA AV
 interpretations while delivering the answer, and steered branches from any
-reading. Activation-map events, flags, and feature clamps are planned; `/api/features`
+reading. Activation-map events and flags are planned; `/api/features`
 still returns placeholder data. The frontend should not present those
-placeholders as model internals. **Integration gap:** `apps/web` currently
-handles tokens and planned map/flag events, but drops `av`, `av_error`, and
-`status: inspecting`; a typed event is not yet a visible interpretation.
+placeholders as model internals.
 
 If you change a shape here, update both `apps/api/app/schemas.py` (Pydantic)
 and `apps/web/src/lib/contract.ts` (TypeScript) in the same commit.
@@ -36,12 +34,6 @@ new id).
 // pace (default true) holds the text at each checkpoint until its AV
 // reading arrives or AV_HOLD_TIMEOUT (4 s) passes.
 { "type": "start", "prompt": "string", "model": "qwen2.5-7b", "pace": true, "run_id": "optional" }
-
-// Reserved steering messages: currently return status:error and do not
-// change generation. Do not show these controls as available yet.
-{ "type": "clamp", "feature_id": "string", "value": -1.0 } // -1..1
-
-{ "type": "reset_clamps" }
 
 // Stop the current stream
 { "type": "stop" }
@@ -121,7 +113,7 @@ new id).
   "feature_id": "feat_4821",
   "value": 0.73,          // 0..1 firing strength
   "coords": { "x": 12.4, "y": -3.1, "z": 0.8 }, // precomputed 3D layout position; all axes required
-  "explanation": "..."    // optional; already rendered by feature-inspector.tsx / diagnostics-feed.tsx
+  "explanation": "..."    // optional
 }
 
 // Planned only: not emitted by the current backend.

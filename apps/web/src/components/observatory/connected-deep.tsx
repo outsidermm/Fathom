@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { activationBus, useStreamStore, type ActivationEntry, type FlagEntry } from "@/lib/stream-store";
 import { MODEL_LABELS, type Feature, type Model } from "@/lib/contract";
+import { useFeatureTestFlag } from "@/lib/use-feature-test-flag";
 import { FeatureMap } from "./feature-map/feature-map";
 import type { MapFeature, MapFlag } from "./feature-map/fake-activation-bus";
 import { TEST_FEATURES, TEST_RUN_ID, testActivationSource } from "./feature-map/test-feature-layout";
@@ -51,15 +52,6 @@ function usePositionedFeatures() {
   return useSyncExternalStore(positions.subscribe, positions.getSnapshot, () => EMPTY_FEATURES);
 }
 
-// `?features=test` swaps in a clustered test layout for frontend design work.
-function useTestLayoutFlag() {
-  return useSyncExternalStore(
-    () => () => {},
-    () => new URLSearchParams(window.location.search).get("features") === "test",
-    () => false,
-  );
-}
-
 function TestFeatureMap({ paused, model }: { paused: boolean; model: Model }) {
   const [flags, setFlags] = useState<readonly MapFlag[]>(EMPTY_FLAGS);
   useEffect(() => {
@@ -77,7 +69,7 @@ function TestFeatureMap({ paused, model }: { paused: boolean; model: Model }) {
 }
 
 export function ConnectedFeatureMap({ paused, model }: { paused: boolean; model: Model }) {
-  const testLayout = useTestLayoutFlag();
+  const testLayout = useFeatureTestFlag();
   return testLayout ? <TestFeatureMap paused={paused} model={model} /> : <LiveFeatureMap paused={paused} model={model} />;
 }
 
