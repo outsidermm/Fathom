@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>Fathom</title>
+  <defs>
+    <clipPath id="fathom-window">
+      <circle cx="64" cy="64" r="49"/>
+    </clipPath>
+  </defs>
+  <circle cx="64" cy="64" r="61" fill="#0b2533"/>
+  <g clip-path="url(#fathom-window)">
+    <circle cx="64" cy="64" r="49" fill="#061a26"/>
+    <path d="M14 46c12-6 20-6 32 0s24 6 36 0 20-6 32 0v66H14V46Z" fill="#53cfdc"/>
+    <path d="M14 57c12-6 20-6 32 0s24 6 36 0 20-6 32 0v55H14V57Z" fill="#228596"/>
+    <path d="M14 72c12-6 20-6 32 0s24 6 36 0 20-6 32 0v40H14V72Z" fill="#123a4d"/>
+    <path d="M14 88c12-6 20-6 32 0s24 6 36 0 20-6 32 0v24H14V88Z" fill="#0b2533"/>
+    <path d="m64 48 3 22h-6l3-22Z" fill="#53cfdc"/>
+    <circle cx="64" cy="73" r="6" fill="#f0c37b"/>
+    <path d="M54 85c6 6 14 6 20 0M48 94c10 10 22 10 32 0" stroke="#53cfdc" stroke-linecap="round" stroke-width="4"/>
+  </g>
+  <circle cx="64" cy="64" r="49" stroke="#123a4d" stroke-width="2"/>
+  <g fill="#f0c37b">
+    <circle cx="64" cy="9" r="3"/>
+    <circle cx="119" cy="64" r="3"/>
+    <circle cx="64" cy="119" r="3"/>
+    <circle cx="9" cy="64" r="3"/>
+  </g>
+</svg>
