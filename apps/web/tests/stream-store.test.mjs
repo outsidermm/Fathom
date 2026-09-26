@@ -106,3 +106,39 @@ test('finished runs accept late alternatives and steer acknowledgements while ig
   assert.equal(run.readings[0].selectedAlternative, 1);
   assert.equal(run.readings[0].steerMessage, 'Steering is not connected yet');
 });
+
+test('a suggested direction starts a fresh guided answer and keeps the original task', async (t) => {
+  const { sockets, state } = await setup(t);
+  sockets[0].open();
+  state().start('Help me buy a car', 'qwen2.5-7b');
+  sockets[0].message({ type: 'token', index: 0, position: 0, text: 'First answer' });
+  const firstId = state().activeRunId;
+
+  assert.equal(state().startGuided('Compare financing options'), true);
+  assert.equal(state().runs[0].status, 'stopped');
+  assert.notEqual(state().activeRunId, firstId);
+  sockets[1].open();
+  const guided = sockets[1].sent.find((message) => message.type === 'start');
+  assert.match(guided.prompt, /^Help me buy a car\n\nFor this new answer, follow this direction: Compare financing options$/);
+  assert.equal(state().runs.at(-1).rootPrompt, 'Help me buy a car');
+  assert.equal(state().runs.at(-1).direction, 'Compare financing options');
+  sockets[0].message({ type: 'token', index: 1, position: 12, text: 'stale' });
+  assert.deepEqual(state().runs.at(-1).tokens, []);
+
+  assert.equal(state().startGuided('Focus on maintenance costs'), true);
+  sockets[2].open();
+  const second = sockets[2].sent.find((message) => message.type === 'start');
+  assert.match(second.prompt, /^Help me buy a car\n\nFor this new answer, follow this direction: Focus on maintenance costs$/);
+  assert.doesNotMatch(second.prompt, /Compare financing options/);
+});
+
+test('guidance over the backend prompt limit leaves the current answer alone', async (t) => {
+  const { sockets, state } = await setup(t);
+  sockets[0].open();
+  state().start('a'.repeat(15990), 'qwen2.5-7b');
+  const firstId = state().activeRunId;
+  assert.equal(state().startGuided('short'), false);
+  assert.equal(state().activeRunId, firstId);
+  assert.equal(state().runs[0].status, 'streaming');
+  assert.equal(sockets.length, 1);
+});

@@ -47,6 +47,9 @@ export interface Reading {
 export interface Run {
   id: string;
   prompt: string;
+  rootPrompt: string;
+  direction?: string;
+  parentRunId?: string;
   model: Model;
   clamps: Record<string, number>;
   tokens: TokenEntry[];
@@ -65,7 +68,8 @@ interface StreamStore {
   selectedFeatureId: string | null;
   hoveredTokenIndex: number | null;
   hasLiveActivations: boolean;
-  start: (prompt: string, model: Model) => void;
+  start: (prompt: string, model: Model, guidance?: { rootPrompt: string; direction: string; parentRunId: string }) => void;
+  startGuided: (direction: string) => boolean;
   rerun: () => void;
   stop: () => void;
   setClamp: (featureId: string, value: number) => void;
@@ -337,7 +341,7 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   selectedFeatureId: null,
   hoveredTokenIndex: null,
   hasLiveActivations: false,
-  start(prompt, model) {
+  start(prompt, model, guidance) {
     if (!prompt.trim()) return;
     const previous = get().runs.find((run) => run.id === get().activeRunId);
     if (previous?.status === "streaming") {
@@ -349,6 +353,9 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
     const run: Run = {
       id,
       prompt: prompt.trim(),
+      rootPrompt: guidance?.rootPrompt ?? prompt.trim(),
+      direction: guidance?.direction,
+      parentRunId: guidance?.parentRunId,
       model,
       clamps,
       tokens: [],
@@ -385,7 +392,24 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   },
   rerun() {
     const run = get().runs.find((item) => item.id === get().activeRunId);
-    if (run) get().start(run.prompt, run.model);
+    if (run) get().start(run.prompt, run.model, run.direction ? {
+      rootPrompt: run.rootPrompt,
+      direction: run.direction,
+      parentRunId: run.parentRunId ?? run.id,
+    } : undefined);
+  },
+  startGuided(direction) {
+    const run = get().runs.find((item) => item.id === get().activeRunId);
+    const trimmed = direction.trim();
+    if (!run || !trimmed) return false;
+    const guidedPrompt = `${run.rootPrompt}\n\nFor this new answer, follow this direction: ${trimmed}`;
+    if (guidedPrompt.length > 16000) return false;
+    get().start(guidedPrompt, run.model, {
+      rootPrompt: run.rootPrompt,
+      direction: trimmed,
+      parentRunId: run.id,
+    });
+    return true;
   },
   stop() {
     pendingStart = null;
