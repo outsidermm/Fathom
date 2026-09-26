@@ -41,7 +41,8 @@ from app.qwen_stream import (  # noqa: E402
     alternatives_count,
     request_alternatives,
 )
-from scripts.predict_eval import PROMPTS as PREDICT_PROMPTS, qwen  # noqa: E402
+from scripts.predict_eval import PROMPTS as PREDICT_PROMPTS  # noqa: E402
+from scripts.predict_eval import qwen  # noqa: E402
 
 PROMPTS = PREDICT_PROMPTS + [
     "I'm buying my first car. Walk me through the process step by step.",
