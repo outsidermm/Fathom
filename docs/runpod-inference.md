@@ -5,7 +5,7 @@ the manual AV smoke test. It does not imply that the repository API is already
 connected to the models: `apps/api/app/main.py` still calls `run_mock_stream`.
 The target-model hook, AR scoring, and live steering remain integration work.
 See [orchestration.md](orchestration.md) for that work and
-[api-contract.md](api-contract.md) for the current browser protocol.
+[api-contract.md](api-contract.md) for the target live browser protocol.
 
 ## What lives where
 

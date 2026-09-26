@@ -28,7 +28,7 @@ docker-compose.yml   Postgres
 
 ## Quick start
 
-**Backend** (mock model pipeline, real contract):
+**Backend** (legacy mock stream for local UI development):
 
 ```bash
 cd apps/api
@@ -38,7 +38,8 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 Health check: `curl localhost:8000/api/health`
-This command runs the mock API. For the separate Runpod model setup, see
+This command runs the mock API, which does not implement the target
+[conversation contract](docs/api-contract.md). For the separate Runpod model setup, see
 [the inference runbook](docs/runpod-inference.md). For the planned path from
 live generation to explanation and task steering, see
 [the orchestration design](docs/orchestration.md).
@@ -65,8 +66,9 @@ docker compose up -d
 ## Status
 
 - [x] Repo scaffolded, frontend and backend build/typecheck clean
-- [x] Mock websocket stream matching the real contract — frontend can build
-      against this without waiting on the model pipeline
+- [x] Legacy mock WebSocket stream for early frontend development
+- [ ] Live conversation API, history, attachments, replies, tool events,
+      inspection, and steering from the target contract
 - [x] Download Qwen2.5-7B-Instruct, NLA AV, and NLA AR checkpoints to the
       Runpod Global volume; verify one AV random-vector smoke test
 - [ ] Validate AV on real Qwen layer-20 activations and AR reconstruction
