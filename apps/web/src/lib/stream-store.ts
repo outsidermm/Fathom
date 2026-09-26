@@ -3,7 +3,6 @@
 import { create } from "zustand";
 import {
   API_BASE,
-  STEERING_ENABLED,
   WS_URL,
   type AVAlternative,
   type Coords,
@@ -172,7 +171,6 @@ function startBranch(message: Extract<ServerMessage, { type: "branch" }>) {
     id: message.run_id,
     prompt: parent.prompt,
     model: parent.model,
-    clamps: {},
     // The parent's text up to the branch point, as one token.
     tokens: kept ? [{ index: -1, text: kept }] : [],
     flags: [],
@@ -337,10 +335,6 @@ function connect() {
     retryCount = 0;
     useStreamStore.setState({ connection: "open" });
     if (pendingStart) {
-      if (STEERING_ENABLED)
-        Object.entries(useStreamStore.getState().clamps).forEach(
-          ([feature_id, value]) => send({ type: "clamp", feature_id, value }),
-        );
       send({ type: "start", ...pendingStart });
       pendingStart = null;
     }
@@ -427,12 +421,10 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
       patchRun(previous.id, { status: "stopped" });
     }
     const id = crypto.randomUUID();
-    const clamps = { ...get().clamps };
     const run: Run = {
       id,
       prompt: prompt.trim(),
       model,
-      clamps,
       tokens: [],
       flags: [],
       readings: {},
@@ -458,10 +450,6 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
       retryCount = 0;
       connect();
     } else if (socket?.readyState === WebSocket.OPEN) {
-      if (STEERING_ENABLED)
-        Object.entries(clamps).forEach(([feature_id, value]) =>
-          send({ type: "clamp", feature_id, value }),
-        );
       send({ type: "start", ...pendingStart });
       pendingStart = null;
     } else if (!socket && subscribers) connect();
