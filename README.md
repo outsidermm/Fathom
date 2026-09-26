@@ -36,6 +36,21 @@ vercel.json  Vercel Services — web + API on one domain, API duration 300s
 render.yaml  Previous Render Blueprint (retained alongside apps/api/Dockerfile)
 ```
 
+## Cloud checks and deployment
+
+GitHub Actions runs Ruff and the API unit tests on Python 3.12, plus frontend
+lint, tests, and a type-checked production build on Node 24. The workflow runs
+for pull requests to `main`, pushes to `main`, and manual dispatches. To keep
+production changes behind these checks, require both `API / Ruff and tests`
+and `Web / lint, tests, build` in the GitHub `main` branch rules.
+
+The connected Vercel project creates a Preview deployment for branch pushes
+and deploys `main` to production after merge.
+GitHub Actions and Vercel run independently; the branch rule is what prevents
+merging a failing PR. See
+[`docs/deployment.md`](docs/deployment.md) for the Runpod URL and Vercel
+environment variables needed for live Qwen streaming.
+
 ## Quick start
 
 **Backend** (current WebSocket with live Qwen text and optional AV checkpoints):

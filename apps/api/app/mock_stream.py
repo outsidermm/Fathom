@@ -12,7 +12,14 @@ import asyncio
 import random
 from typing import Awaitable, Callable
 
-from .schemas import ActivationEvent, Coords, Feature, FlagEvent, StatusEvent, TokenEvent
+from .schemas import (
+    ActivationEvent,
+    Coords,
+    Feature,
+    FlagEvent,
+    StatusEvent,
+    TokenEvent,
+)
 
 # A fixed, hand-picked feature set so the map layout is stable across runs.
 # Real version: load from Neuronpedia / your SAE checkpoint and cache a
