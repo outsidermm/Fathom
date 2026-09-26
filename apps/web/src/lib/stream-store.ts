@@ -448,9 +448,16 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
     history.set(id, []);
     queued = [];
     pendingStart = { prompt: run.prompt, model, run_id: id };
-    // Late events of a stopped run carry its run_id, so they cannot land here;
-    // keeping the socket keeps earlier runs steerable.
-    if (socket?.readyState === WebSocket.OPEN) {
+    // A new prompt gets a new socket, so nothing from an earlier one can
+    // land here. Steers keep the socket: a run and its branches stay
+    // steerable, and their events are told apart by run_id.
+    if (socket?.readyState === WebSocket.OPEN && previous) {
+      socketEpoch++;
+      socket.close();
+      socket = null;
+      retryCount = 0;
+      connect();
+    } else if (socket?.readyState === WebSocket.OPEN) {
       if (STEERING_ENABLED)
         Object.entries(clamps).forEach(([feature_id, value]) =>
           send({ type: "clamp", feature_id, value }),
