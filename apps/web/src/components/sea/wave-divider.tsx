@@ -1,44 +1,36 @@
-import { cn } from "@/lib/utils";
+import styles from "./sea.module.css";
 
-/** Two slow, offset foam layers mark the boundary between Surface and Deep. */
-export function WaveDivider({ className }: { className?: string }) {
+export function WaveDivider({ className = "" }: { className?: string }) {
   return (
-    <div
+    <svg
       aria-hidden="true"
-      className={cn("pointer-events-none relative h-12 w-full overflow-hidden", className)}
+      className={`${styles.wave} ${className}`}
+      preserveAspectRatio="none"
+      viewBox="0 0 1200 68"
     >
-      <svg
-        viewBox="0 0 2880 48"
-        preserveAspectRatio="none"
-        className="absolute inset-0 h-full w-[200%] animate-[drift_14s_linear_infinite] opacity-50"
-      >
+      <g className={styles.waveBack}>
         <path
-          d="M0 25 C180 5 360 45 540 25 S900 5 1080 25 S1260 45 1440 25 C1620 5 1800 45 1980 25 S2340 5 2520 25 S2700 45 2880 25 V48 H0Z"
-          fill="var(--water-deep)"
-        />
-        <path
-          d="M0 25 C180 5 360 45 540 25 S900 5 1080 25 S1260 45 1440 25 C1620 5 1800 45 1980 25 S2340 5 2520 25 S2700 45 2880 25"
+          d="M0 28 C100 6 200 6 300 28 S500 50 600 28 S800 6 900 28 S1100 50 1200 28 S1400 6 1500 28 S1700 50 1800 28 S2000 6 2100 28 S2300 50 2400 28"
           fill="none"
-          stroke="var(--foam)"
-          strokeWidth="3"
+          stroke="var(--water-mid, #9fd5e6)"
+          strokeWidth="22"
         />
-      </svg>
-      <svg
-        viewBox="0 0 2880 48"
-        preserveAspectRatio="none"
-        className="absolute inset-0 h-full w-[200%] animate-[drift_14s_linear_infinite_reverse]"
-      >
+      </g>
+      <g className={styles.waveFront}>
         <path
-          d="M0 31 C240 12 480 42 720 31 S1200 12 1440 31 C1680 12 1920 42 2160 31 S2640 12 2880 31 V48 H0Z"
-          fill="var(--trench)"
-        />
-        <path
-          d="M0 31 C240 12 480 42 720 31 S1200 12 1440 31 C1680 12 1920 42 2160 31 S2640 12 2880 31"
+          d="M0 35 C100 13 200 13 300 35 S500 57 600 35 S800 13 900 35 S1100 57 1200 35 S1400 13 1500 35 S1700 57 1800 35 S2000 13 2100 35 S2300 57 2400 35"
           fill="none"
-          stroke="var(--foam)"
-          strokeWidth="3"
+          stroke="var(--water-deep, #5896ab)"
+          strokeWidth="28"
         />
-      </svg>
-    </div>
+        <path
+          d="M0 21 C100 -1 200 -1 300 21 S500 43 600 21 S800 -1 900 21 S1100 43 1200 21 S1400 -1 1500 21 S1700 43 1800 21 S2000 -1 2100 21 S2300 43 2400 21"
+          fill="none"
+          stroke="var(--foam, #fff)"
+          strokeLinecap="round"
+          strokeWidth="4"
+        />
+      </g>
+    </svg>
   );
 }

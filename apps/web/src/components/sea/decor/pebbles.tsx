@@ -1,12 +1,12 @@
-import type { SVGProps } from "react";
+import styles from "./decor.module.css";
 
-export function Pebbles(props: SVGProps<SVGSVGElement>) {
+export function Pebbles({ size = 100, className = "" }: { size?: number; className?: string }) {
   return (
-    <svg viewBox="0 0 100 60" fill="none" aria-hidden="true" {...props}>
-      <path d="M4 43c0-9 8-17 19-17s20 8 20 17c0 7-9 11-20 11S4 50 4 43Z" fill="var(--crate)" stroke="var(--driftwood)" strokeWidth="2" />
-      <path d="M37 39c0-12 10-24 25-24s25 12 25 24c0 10-11 16-25 16S37 49 37 39Z" fill="var(--sand-beach)" stroke="var(--driftwood)" strokeWidth="2" />
-      <path d="M75 45c0-7 6-14 13-14s11 7 11 14c0 7-5 10-12 10s-12-3-12-10Z" fill="var(--sea-glass)" stroke="var(--ink)" strokeWidth="2" />
-      <path d="M49 29c4-5 10-7 16-6" stroke="var(--foam)" strokeWidth="3" strokeLinecap="round" opacity=".7" />
+    <svg aria-hidden="true" className={`${styles.float} ${styles.later} ${className}`} width={size} height={size * 0.58} viewBox="0 0 100 58">
+      <path d="M4 49 Q4 31 19 27 Q33 24 38 38 Q42 50 32 54 L13 54 Q7 54 4 49Z" fill="var(--crate, #c5a97c)" stroke="var(--driftwood, #503120)" strokeWidth="2" />
+      <path d="M30 51 Q29 21 49 16 Q67 17 72 43 Q74 52 66 55 L39 55 Q34 55 30 51Z" fill="var(--sand-light, #f8eee1)" stroke="var(--plank-dark, #a45e37)" strokeWidth="2" />
+      <path d="M65 50 Q68 34 81 32 Q93 32 96 48 Q97 54 88 55 L73 55 Q68 55 65 50Z" fill="var(--sea-glass, #72c3d5)" stroke="var(--ink, #055958)" strokeWidth="2" />
+      <path d="M41 40 Q44 29 51 28 M12 44 Q15 36 21 35 M77 45 Q80 38 85 38" fill="none" stroke="var(--foam, #fff)" strokeWidth="2" strokeLinecap="round" opacity=".7" />
     </svg>
   );
 }

@@ -164,15 +164,15 @@ export function CoachMarks() {
     <div className="pointer-events-none fixed inset-0 z-50" aria-live="polite">
       <div
         ref={noteRef}
+        role="group"
+        aria-labelledby="coach-mark-title"
+        aria-describedby="coach-mark-body"
         className={`pointer-events-auto absolute w-[min(300px,calc(100vw-32px))] ${reducedMotion ? "" : "animate-[settle_320ms_ease-out_both]"}`}
         style={{ left: position.left, top: position.top }}
       >
         <PaperNote
           pin
           rotate={step === 1 ? 0.5 : -0.5}
-          role="group"
-          aria-labelledby="coach-mark-title"
-          aria-describedby="coach-mark-body"
           className="max-h-[calc(100vh-32px)] overflow-auto pt-7"
         >
           <p className="font-mono text-xs text-muted-foreground">

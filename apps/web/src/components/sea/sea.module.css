@@ -1,0 +1,174 @@
+.wave {
+  display: block;
+  width: 100%;
+  height: 68px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.waveBack,
+.waveFront {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.waveBack {
+  animation: drift 14s linear infinite;
+}
+
+.waveFront {
+  animation: drift 14s linear infinite reverse;
+}
+
+@keyframes drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.seaPanel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--water, #aae2f0), var(--water-mid, #9fd5e6));
+  color: var(--ink, #055958);
+}
+
+.seaCaustics {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.seaPanelContent {
+  position: relative;
+  z-index: 1;
+}
+
+.seaPanel::before,
+.deepViewport::before {
+  position: absolute;
+  inset: -20% -100% 0 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 120px 26px at 10% 20%, rgb(255 255 255 / 0.22), transparent 70%),
+    radial-gradient(ellipse 170px 32px at 36% 61%, rgb(255 255 255 / 0.18), transparent 70%),
+    radial-gradient(ellipse 140px 28px at 70% 36%, rgb(255 255 255 / 0.16), transparent 70%),
+    radial-gradient(ellipse 200px 34px at 90% 75%, rgb(255 255 255 / 0.16), transparent 70%);
+  background-size: 50% 100%;
+  content: "";
+  pointer-events: none;
+  animation: drift 14s linear infinite;
+}
+
+.deepViewport {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--trench, #123a4d) 0%, var(--deep, #0b2533) 48%, var(--abyss, #061a26) 100%);
+  color: var(--deep-ink, #f6efec);
+}
+
+.deepViewport::before {
+  inset: 10% -100% 45% 0;
+  opacity: 0.22;
+}
+
+.deepWave {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  width: 100%;
+}
+
+.deepContent {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.paperNote {
+  position: relative;
+  padding: 1.75rem 1.5rem 1.5rem;
+  border-radius: 4px;
+  background: var(--paper, #f6efec);
+  color: var(--driftwood, #503120);
+  box-shadow: 0 10px 24px rgb(80 49 32 / 0.18);
+  transform: rotate(var(--note-rotate, 0deg));
+  transform-origin: 50% 12px;
+  transition: transform 180ms cubic-bezier(.2,.8,.2,1);
+}
+
+.paperNote:hover {
+  transform: rotate(0deg) translateY(-2px);
+}
+
+.paperNotePin {
+  position: absolute;
+  top: 8px;
+  left: calc(50% - 6px);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--coral, #e27459);
+  box-shadow: 0 2px 2px rgb(80 49 32 / 0.3), inset 0 2px 1px rgb(255 255 255 / 0.35);
+}
+
+.paperTitle {
+  width: fit-content;
+  margin: 0 0 0.75rem;
+  color: var(--harbor, #0e6398);
+  font-family: var(--font-ui, "Trebuchet MS"), sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-decoration: underline wavy var(--coral, #e27459);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
+
+.plank {
+  position: relative;
+  padding: 1rem 1.25rem;
+  clip-path: polygon(0.6% 1%, 99.5% 0, 100% 95%, 98.9% 100%, 0 98%);
+  border-radius: 10px;
+  background:
+    repeating-linear-gradient(178deg, rgb(0 0 0 / 0.05) 0 2px, transparent 2px 14px),
+    linear-gradient(180deg, var(--plank, #cc8f4f), var(--plank, #cc8f4f) 40%, var(--plank-dark, #a45e37));
+  box-shadow: inset 0 -5px 0 var(--plank-dark, #a45e37);
+  color: var(--driftwood, #503120);
+  font-family: var(--font-ui, "Trebuchet MS"), sans-serif;
+  font-weight: 600;
+}
+
+.chalkboard {
+  position: relative;
+  padding: 1.5rem;
+  border: 10px solid var(--plank, #cc8f4f);
+  border-radius: 10px;
+  background: #2a2a2a;
+  box-shadow: inset 0 0 0 2px var(--plank-dark, #a45e37), 0 8px 18px rgb(80 49 32 / 0.18);
+  color: var(--foam, #fff);
+  font-family: var(--font-ui, "Trebuchet MS"), sans-serif;
+  font-weight: 500;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waveBack,
+  .waveFront,
+  .seaPanel::before,
+  .deepViewport::before {
+    animation: none;
+  }
+
+  .paperNote {
+    transition: none;
+  }
+}

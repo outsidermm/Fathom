@@ -1,0 +1,22 @@
+.float {
+  display: block;
+  transform-origin: center;
+  animation: bob 3.2s ease-in-out infinite alternate;
+}
+
+.delayed {
+  animation-delay: -1.1s;
+}
+
+.later {
+  animation-delay: -2.2s;
+}
+
+@keyframes bob {
+  from { transform: translateY(0); }
+  to { transform: translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float { animation: none; }
+}

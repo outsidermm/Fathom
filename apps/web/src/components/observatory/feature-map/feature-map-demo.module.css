@@ -1,0 +1,39 @@
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .8rem;
+  margin-bottom: 1rem;
+}
+
+.field {
+  display: grid;
+  flex: 1 1 260px;
+  max-width: 460px;
+  gap: .35rem;
+  font-weight: 700;
+}
+
+.status {
+  min-width: 7rem;
+  color: var(--slate, #384151);
+  font-size: .875rem;
+}
+
+.viewport {
+  height: min(70svh, 600px);
+  min-height: 480px;
+}
+.sampleControls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: 1rem; }
+.sampleControls p { flex: 1 1 240px; margin: 0; font-size: .875rem; }
+.tokens { margin-top: 1rem; padding: .8rem; border-radius: 12px; background: var(--paper, #f6efec); color: var(--driftwood, #503120); }
+.tokens p { margin: 0 0 .5rem; font-size: .875rem; }
+.tokens > span { font-size: .875rem; }
+.tokens button { margin: 2px; padding: .3rem .4rem; border: 1px solid transparent; border-radius: 4px; cursor: pointer; touch-action: manipulation; }
+.tokens button:hover, .tokens button[aria-pressed="true"] { background: var(--sand-light, #f8eee1); border-color: var(--driftwood, #503120); }
+.tokens button:focus-visible { outline: 3px solid var(--harbor, #0e6398); outline-offset: 2px; }
+.tokens .flaggedToken { text-decoration: underline; text-decoration-color: var(--alert, #e84f27); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.flaggedToken span { color: var(--alert, #e84f27); }
+.diagnostics { margin-top: 1.5rem; }
+.diagnostics h3 { margin: 0 0 .4rem; font-family: var(--font-display, "Darumadrop One"), sans-serif; font-size: 1.5rem; color: var(--ink, #055958); }
+.diagnostics > p { margin: 0 0 .8rem; font-size: .875rem; }

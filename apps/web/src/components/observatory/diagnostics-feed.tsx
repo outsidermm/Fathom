@@ -1,83 +1,80 @@
 "use client";
 
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { activationBus, useStreamStore } from "@/lib/stream-store";
+import * as Accordion from "@radix-ui/react-accordion";
+import { memo, useMemo } from "react";
 
-export function DiagnosticsFeed() {
-  const run = useStreamStore((state) =>
-    state.runs.find((item) => item.id === state.activeRunId),
-  );
-  const features = useStreamStore((state) => state.features);
-  const select = useStreamStore((state) => state.selectFeature);
+import type { ActivationSource, MapActivation, MapFeature, MapFlag, MapToken } from "./feature-map/fake-activation-bus";
+import styles from "./diagnostics-feed.module.css";
+
+const percent = new Intl.NumberFormat("en", { style: "percent", maximumFractionDigits: 0 });
+const strength = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
+
+function TopFeatures({ runId, flag, source, features, onSelectFeature }: {
+  runId: string; flag: MapFlag; source: ActivationSource;
+  features: ReadonlyMap<string, MapFeature>; onSelectFeature: (id: string | null) => void;
+}) {
+  const top = useMemo(() => {
+    const unique = new Map<string, MapActivation>();
+    for (const entry of source.forToken(runId, flag.tokenIndex)) {
+      if (entry.value > (unique.get(entry.featureId)?.value ?? -1)) unique.set(entry.featureId, entry);
+    }
+    return [...unique.values()].sort((a, b) => b.value - a.value || a.featureId.localeCompare(b.featureId)).slice(0, 3);
+  }, [runId, flag.tokenIndex, source]);
+
   return (
-    <section
-      className="rounded-xl bg-sand-light p-4"
-      aria-labelledby="diagnostics-title"
-    >
-      <h2
-        id="diagnostics-title"
-        className="font-ui text-base font-bold text-ink"
-      >
-        Diagnostics
-      </h2>
-      {!run?.flags.length ? (
-        <p className="mt-2 font-body text-sm text-muted-foreground">
-          No diagnostic flags from this run.
-        </p>
-      ) : (
-        <Accordion type="single" collapsible className="mt-3">
-          {run.flags.map((flag, index) => {
-            const token =
-              run.tokens.find((item) => item.index === flag.tokenIndex)?.text ??
-              "";
-            const top = activationBus
-              .forToken(run.id, flag.tokenIndex)
-              .sort((a, b) => b.value - a.value)
-              .slice(0, 3);
-            return (
-              <AccordionItem
-                key={`${flag.tokenIndex}-${flag.signature}-${index}`}
-                value={`flag-${index}`}
-              >
-                <AccordionTrigger className="min-h-10 px-3 py-2 text-sm">
-                  ⚠ {flag.signature} · {Math.round(flag.confidence * 100)}% ·
-                  token {flag.tokenIndex} “{token.trim() || "—"}”
-                </AccordionTrigger>
-                <AccordionContent>
-                  {top.length ? (
-                    <>
-                      <p className="mb-2 font-ui text-xs font-bold">
-                        Top active features
-                      </p>
-                      <div className="flex flex-col items-start gap-1">
-                        {top.map((entry) => (
-                          <button
-                            key={entry.featureId}
-                            type="button"
-                            onClick={() => select(entry.featureId)}
-                            className="rounded px-2 py-1 text-left text-harbor underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-harbor"
-                          >
-                            {features[entry.featureId]?.label ??
-                              entry.featureId}{" "}
-                            · {Math.round(entry.value * 100)}%
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <p>No activation data for this flagged token.</p>
-                  )}
-                </AccordionContent>
-              </AccordionItem>
-            );
-          })}
-        </Accordion>
-      )}
-    </section>
+    <div className={styles.details}>
+      <p>Strongest features on this token</p>
+      {top.length ? <ol>{top.map((entry) => (
+        <li key={entry.featureId}>
+          <button type="button" className={styles.feature} onClick={() => onSelectFeature(entry.featureId)}>
+            <span>{features.get(entry.featureId)?.label ?? entry.featureId}</span>
+            <span className={styles.value}>{strength.format(entry.value)}</span>
+          </button>
+          {entry.explanation ? <p className={styles.explanation}>{entry.explanation}</p> : null}
+        </li>
+      ))}</ol> : <p>No activation details were captured for this token.</p>}
+    </div>
   );
 }
+
+export const DiagnosticsFeed = memo(function DiagnosticsFeed({
+  activeRunId, flags, tokens, features, source, onSelectFeature, headingLevel = 3,
+}: {
+  activeRunId: string | null; flags: readonly MapFlag[]; tokens: readonly MapToken[];
+  features: readonly MapFeature[]; source: ActivationSource;
+  onSelectFeature: (id: string | null) => void;
+  headingLevel?: 3 | 4;
+}) {
+  const Heading = headingLevel === 4 ? "h4" : "h3";
+  const byId = useMemo(() => new Map(features.map((feature) => [feature.id, feature])), [features]);
+  const tokensByIndex = useMemo(() => new Map(tokens.map((token) => [token.index, token.text])), [tokens]);
+
+  if (!activeRunId || flags.length === 0) {
+    return <p className={styles.empty}>{activeRunId ? "No flags in this run." : "Run a prompt to see flagged tokens here."}</p>;
+  }
+
+  return (
+    <div className={styles.feed}>
+      <p className={styles.summary} role="status">{flags.length} flagged {flags.length === 1 ? "token" : "tokens"}</p>
+      <Accordion.Root key={activeRunId} type="multiple" className={styles.accordion}>
+        {flags.map((flag, index) => (
+          <Accordion.Item key={`${flag.tokenIndex}:${flag.signature}:${index}`}
+            value={`${flag.tokenIndex}:${flag.signature}:${index}`} className={styles.item}>
+            <Accordion.Header asChild><Heading className={styles.heading}>
+              <Accordion.Trigger className={styles.trigger}>
+                <span className={styles.flagIcon} aria-hidden="true">⚠</span>
+                <span className={styles.label}>{flag.signature} · {percent.format(flag.confidence)}
+                  <span className={styles.token}>Token {flag.tokenIndex + 1} “{tokensByIndex.get(flag.tokenIndex) ?? "…"}”</span>
+                </span>
+                <span className={styles.chevron} aria-hidden="true">⌄</span>
+              </Accordion.Trigger>
+            </Heading></Accordion.Header>
+            <Accordion.Content className={styles.content}>
+              <TopFeatures runId={activeRunId} flag={flag} source={source} features={byId} onSelectFeature={onSelectFeature} />
+            </Accordion.Content>
+          </Accordion.Item>
+        ))}
+      </Accordion.Root>
+    </div>
+  );
+});

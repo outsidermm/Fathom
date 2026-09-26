@@ -1,18 +1,15 @@
-import type { SVGProps } from "react";
+import styles from "./decor.module.css";
 
-export function Starfish(props: SVGProps<SVGSVGElement>) {
+export function Starfish({ size = 82, className = "" }: { size?: number; className?: string }) {
   return (
-    <svg viewBox="0 0 80 80" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M40 7c4 0 7 17 10 21 4 3 21-4 24 0 3 5-11 17-12 22-1 5 8 20 4 24-4 4-21-6-26-6s-22 10-26 6c-4-4 5-19 4-24C17 45 3 33 6 28c3-4 20 3 24 0 3-4 6-21 10-21Z"
-        fill="var(--starfish)"
-        stroke="var(--driftwood)"
-        strokeWidth="3"
-        strokeLinejoin="round"
-      />
-      <circle cx="32" cy="39" r="2" fill="var(--driftwood)" />
-      <circle cx="48" cy="39" r="2" fill="var(--driftwood)" />
-      <path d="M34 49c3 3 9 3 12 0" stroke="var(--driftwood)" strokeWidth="2" strokeLinecap="round" />
+    <svg aria-hidden="true" className={`${styles.float} ${className}`} width={size} height={size} viewBox="0 0 100 100">
+      <path d="M50 8 Q54 8 57 17 L63 38 L85 34 Q94 33 95 40 Q96 45 87 50 L69 60 L80 79 Q85 88 79 92 Q74 96 67 89 L50 73 L33 89 Q26 96 21 92 Q15 88 20 79 L31 60 L13 50 Q4 45 5 40 Q6 33 15 34 L37 38 L43 17 Q46 8 50 8Z" fill="var(--starfish, #e5a83d)" stroke="var(--plank-dark, #a45e37)" strokeWidth="3" strokeLinejoin="round" />
+      <circle cx="43" cy="53" r="2" fill="var(--driftwood, #503120)" />
+      <circle cx="57" cy="53" r="2" fill="var(--driftwood, #503120)" />
+      <path d="M45 62 Q50 66 55 62" fill="none" stroke="var(--driftwood, #503120)" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="49" cy="30" r="2" fill="var(--sand-light, #f8eee1)" opacity=".75" />
+      <circle cx="29" cy="47" r="2" fill="var(--sand-light, #f8eee1)" opacity=".75" />
+      <circle cx="70" cy="48" r="2" fill="var(--sand-light, #f8eee1)" opacity=".75" />
     </svg>
   );
 }

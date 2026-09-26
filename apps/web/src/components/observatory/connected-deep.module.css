@@ -1,0 +1,14 @@
+.host { position: relative; min-height: 350px; height: 100%; }
+.live { height: 100%; }
+.paused .live canvas { visibility: hidden; }
+.frozen { position: absolute; pointer-events: none; }
+.notice {
+  position: absolute;
+  top: 80px;
+  left: 1rem;
+  right: 1rem;
+  padding: .5rem;
+  background: var(--abyss);
+  color: var(--deep-ink);
+  font-size: .875rem;
+}
