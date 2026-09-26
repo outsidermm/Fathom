@@ -9,19 +9,19 @@ const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 const steps = [
   {
-    title: "Explore the observatory",
-    body: "Live Qwen answers appear below. The feature map is waiting for activation data.",
-    target: "map",
+    title: "Watch the model think ahead",
+    body: "Before each section of the answer, a bubble rises in the ocean with what Qwen's internal state was focused on.",
+    target: "ocean",
   },
   {
-    title: "Click a glowing feature",
-    body: "When activation data is connected, select a dot to inspect its activity.",
-    target: "map",
+    title: "Steer from any bubble",
+    body: "Open a bubble to pick another direction Qwen suggests, or type your own. The answer branches from there.",
+    target: "ocean",
   },
   {
-    title: "Clamp it and rerun",
-    body: "Steering is not connected yet. These controls will let you compare answers once it is available.",
-    target: "controls",
+    title: "Follow it in the text",
+    body: "Dots in the answer mark where each bubble's section begins. Click one to find its bubble.",
+    target: "answer",
   },
 ] as const;
 

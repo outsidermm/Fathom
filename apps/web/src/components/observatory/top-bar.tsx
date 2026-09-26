@@ -1,74 +1,47 @@
 "use client";
 
 import Image from "next/image";
+import type { ReactNode } from "react";
 import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { MODEL_LABELS, type Model } from "@/lib/contract";
+import { useStreamStore } from "@/lib/stream-store";
 
-export function TopBar({
-  model,
-  onModelChange,
-  motionPaused,
-  onMotionChange,
-}: {
-  model: Model;
-  onModelChange: (model: Model) => void;
-  motionPaused: boolean;
-  onMotionChange: (paused: boolean) => void;
-}) {
+export function TopBar({ children }: { children?: ReactNode }) {
+  const paused = useStreamStore((state) => state.paused);
+  const setPaused = useStreamStore((state) => state.setPaused);
   return (
-    <header className="surface-panel relative z-20 flex flex-wrap items-center justify-between gap-4 px-5 py-4">
-      <div className="flex items-center gap-3">
+    <header className="surface-panel relative z-20 flex flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3">
+      <div className="flex shrink-0 items-center gap-3">
         {/* Served as-is: /_next/image is not routed on the Vercel Services
             deployment, so an optimized image 404s there. */}
         <Image
           src="/brand/fathom-mark-112.png"
           alt=""
-          width={56}
-          height={56}
+          width={44}
+          height={44}
           unoptimized
           className="shrink-0"
         />
-        <div className="flex flex-col gap-1">
-          <h1 className="surface-title">Fathom</h1>
-          <p className="font-body text-xs">
+        <div className="flex flex-col gap-0.5">
+          <h1 className="surface-title text-2xl">Fathom</h1>
+          <p className="font-body text-xs max-xl:sr-only">
             See what surfaces. Shape what happens next.
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 font-ui text-sm font-bold">
-          <label htmlFor="model-select">Model</label>
-          <Select
-            name="model"
-            value={model}
-            onValueChange={(value) => onModelChange(value as Model)}
-          >
-            <SelectTrigger id="model-select">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper" align="end" sideOffset={8}>
-              <SelectItem value="qwen2.5-7b">{MODEL_LABELS["qwen2.5-7b"]}</SelectItem>
-              <SelectItem value="gemma-2b" disabled>
-                {MODEL_LABELS["gemma-2b"]} (unavailable)
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      {/* The prompt, Run/Stop and Pause share one row and one gap. */}
+      <div className="flex min-w-0 flex-1 basis-full items-start gap-2 md:basis-auto">
+        {children}
+        {/* Freezes the answer where it is, and the ocean with it. */}
         <Button
           type="button"
-          onClick={() => onMotionChange(!motionPaused)}
-          aria-pressed={motionPaused}
+          variant="outline"
+          className="h-11 min-w-28"
+          onClick={() => setPaused(!paused)}
+          aria-pressed={paused}
         >
-          {motionPaused ? "Resume Motion" : "Pause Motion"}
-          {motionPaused ? <Play aria-hidden /> : <Pause aria-hidden />}
+          {paused ? <Play aria-hidden /> : <Pause aria-hidden />}
+          {paused ? "Resume" : "Pause"}
         </Button>
       </div>
     </header>

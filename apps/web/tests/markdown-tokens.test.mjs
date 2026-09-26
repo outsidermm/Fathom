@@ -52,3 +52,23 @@ test('model HTML is not rendered and unsafe Markdown URLs are filtered', () => {
   const html = render(['<script>alert(1)</script>\n\n[click](javascript:alert(1))']);
   assert.doesNotMatch(html, /<script|href="javascript:/);
 });
+
+test('section markers split a token and land on the first text at or after them', () => {
+  const tokens = [{ index: 0, text: 'Intro.\n\n### 2. Loans' }];
+  const html = renderToStaticMarkup(createElement(Markdown, {
+    skipHtml: true,
+    rehypePlugins: [rehypeStreamTokens(tokens, [{ offset: 8, key: 'r:2' }, { offset: 0, key: 'r:0' }])],
+  }, tokens[0].text));
+  assert.match(html, /<p><span data-token-index="0"[^>]*data-section="r:0"[^>]*>Intro\.<\/span><\/p>/);
+  assert.match(html, /<h3><span data-token-index="0"[^>]*data-section="r:2"[^>]*>2\. Loans<\/span><\/h3>/);
+});
+
+test('readings landing on the same text share one marker, the latest', () => {
+  const tokens = [{ index: 0, text: '### 2. Loans' }];
+  const html = renderToStaticMarkup(createElement(Markdown, {
+    skipHtml: true,
+    rehypePlugins: [rehypeStreamTokens(tokens, [{ offset: 0, key: 'parent:2' }, { offset: 0, key: 'branch:2' }])],
+  }, tokens[0].text));
+  assert.equal((html.match(/data-section=/g) ?? []).length, 1);
+  assert.match(html, /data-section="branch:2"/);
+});

@@ -10,14 +10,16 @@ import styles from "./sea-life.module.css";
 
 const DECORATIONS = { pebbles: Pebbles, shell: Shell, starfish: Starfish };
 
-export const SeaLife = memo(function SeaLife({ paused = false, receded = false }: { paused?: boolean; receded?: boolean }) {
+export const SeaLife = memo(function SeaLife({ paused = false, receded = false, attractor = null }: {
+  paused?: boolean; receded?: boolean; attractor?: { x: number; y: number } | null;
+}) {
   const id = useId();
   const layout = useMemo(() => createSeabed(id), [id]);
   const load = useCallback(async () => {
     const { createSeaScene } = await import("./sea-scene");
     return (host: HTMLDivElement, initiallyPaused: boolean) => createSeaScene(host, layout, initiallyPaused);
   }, [layout]);
-  const hostRef = useSeaScene(load, paused, receded);
+  const hostRef = useSeaScene(load, paused, receded, attractor);
 
   return (
     <div ref={hostRef} className={styles.scene} aria-hidden="true" data-sea-life>

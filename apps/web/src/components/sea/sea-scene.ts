@@ -29,7 +29,7 @@ type Swimmer = ReturnType<typeof createFish> & {
   size: number;
   phase: number;
   target: Prop | null;
-  mode: "cruise" | "approach" | "inspect";
+  mode: "cruise" | "approach" | "inspect" | "visit";
   timer: number;
   cooldown: number;
   mobile: boolean;
@@ -157,6 +157,27 @@ export function createSeaScene(host: HTMLDivElement, layout: SeabedItem[], initi
   let debugTime = -1;
   let encounters = 0;
   const goal = new THREE.Vector3();
+  // A point on screen a couple of fish circle, at mid-water depth.
+  let attractor: { x: number; y: number } | null = null;
+  const attractorWorld = new THREE.Vector3();
+  const raycaster = new THREE.Raycaster();
+  const midWater = new THREE.Plane(new THREE.Vector3(0, 0, 1), 1);
+  const pointer = new THREE.Vector2();
+  function attractorAt(point: { x: number; y: number }) {
+    pointer.set(point.x * 2 - 1, 1 - point.y * 2);
+    raycaster.setFromCamera(pointer, camera);
+    return raycaster.ray.intersectPlane(midWater, attractorWorld);
+  }
+  function setAttractor(point: { x: number; y: number } | null) {
+    for (const swimmer of fish) if (swimmer.mode === "visit") { swimmer.mode = "cruise"; swimmer.cooldown = 3; }
+    attractor = point;
+    if (!point || !attractorAt(point)) return;
+    // The two nearest free swimmers go to look.
+    fish.filter(swimmer => swimmer.root.visible && swimmer.mode === "cruise")
+      .sort((a, b) => a.root.position.distanceToSquared(attractorWorld) - b.root.position.distanceToSquared(attractorWorld))
+      .slice(0, 2)
+      .forEach(swimmer => { swimmer.mode = "visit"; swimmer.target = null; });
+  }
   const steering = new THREE.Vector3();
   const separation = new THREE.Vector3();
   const inspectOffset = new THREE.Vector3();
@@ -188,6 +209,12 @@ export function createSeaScene(host: HTMLDivElement, layout: SeabedItem[], initi
           if (nearest) { swimmer.target = nearest; swimmer.mode = "approach"; swimmer.timer = 0; }
           else swimmer.cooldown = 3;
         }
+      }
+      if (swimmer.mode === "visit") {
+        if (attractor && attractorAt(attractor)) {
+          const orbit = elapsed * .7 + swimmer.phase;
+          goal.copy(attractorWorld).add(inspectOffset.set(Math.cos(orbit) * 1.1, Math.sin(orbit * 1.3) * .3, Math.sin(orbit) * .6));
+        } else swimmer.mode = "cruise";
       }
       if (swimmer.target) {
         const prop = swimmer.target;
@@ -276,6 +303,7 @@ export function createSeaScene(host: HTMLDivElement, layout: SeabedItem[], initi
       debugTime = elapsed;
       canvas.dataset.encounters = String(encounters);
       canvas.dataset.inspecting = String(fish.filter(swimmer => swimmer.mode === "inspect").length);
+      canvas.dataset.visiting = String(fish.filter(swimmer => swimmer.mode === "visit").length);
       canvas.dataset.simulationTime = elapsed.toFixed(1);
     }
   }
@@ -301,6 +329,7 @@ export function createSeaScene(host: HTMLDivElement, layout: SeabedItem[], initi
 
   return {
     setPaused: loop.setPaused,
+    setAttractor,
     setReceded(receded) {
       fogTarget = receded ? FOG_RECEDED : FOG_CLEAR;
       // With motion stopped there is no frame loop to ease it, so jump there.

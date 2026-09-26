@@ -3,7 +3,6 @@
 import { create } from "zustand";
 import {
   API_BASE,
-  STEERING_ENABLED,
   WS_URL,
   type AVAlternative,
   type Coords,
@@ -14,6 +13,7 @@ import {
   type SteerDirection,
   type SteerScore,
 } from "@/lib/contract";
+import { codePointLength, codePointToUtf16 } from "@/lib/code-points";
 
 export type RunStatus = "streaming" | "done" | "error" | "stopped";
 export interface TokenEntry {
@@ -54,6 +54,7 @@ export interface SteerInfo {
   kind: "toward" | "away";
   focus: string;
   label: string; // the parent reading's label ("Step 1")
+  checkpointId: number; // the parent's checkpoint it branched at
   opening?: string;
   anchored: boolean;
   note?: string;
@@ -63,7 +64,7 @@ export interface Run {
   id: string;
   prompt: string;
   model: Model;
-  clamps: Record<string, number>;
+  // The text shown so far; received text waits in the pacer (see below).
   tokens: TokenEntry[];
   flags: FlagEntry[];
   readings: Record<number, Reading>;
@@ -71,25 +72,43 @@ export interface Run {
   message?: string;
   parentRunId?: string;
   steer?: SteerInfo;
+  // Paced runs: text is held while this checkpoint's reading is made.
+  inspecting?: { checkpointId: number; label: string };
+  // Readings cancelled because they missed their section.
+  avDropped?: number;
 }
+// One reading on the active run's path: its own readings, after its
+// ancestors' readings up to each branch point.
+export interface ChainEntry {
+  runId: string;
+  reading: Reading;
+  // Set on the reading a later run on the path was steered from, with how
+  // many of this run's later readings that path left behind.
+  forkedTo?: SteerInfo;
+  leftBehind?: number;
+}
+// A reading is addressed across runs as `${runId}:${checkpointId}`.
+export const readingKey = (runId: string, checkpointId: number) =>
+  `${runId}:${checkpointId}`;
 interface StreamStore {
   connection: "connecting" | "open" | "retrying" | "closed";
   features: Record<string, Feature>;
   runs: Run[];
   activeRunId: string | null;
-  baselineRunId: string | null;
-  clamps: Record<string, number>;
-  selectedFeatureId: string | null;
-  hoveredTokenIndex: number | null;
+  // Reading keys: hovered in the ocean or the text, and the one opened to steer.
+  hoveredReading: string | null;
+  openReading: string | null;
   hasLiveActivations: boolean;
+  // Pause freezes the answer where it is (and the ocean's motion).
+  paused: boolean;
+  setPaused: (paused: boolean) => void;
   start: (prompt: string, model: Model) => void;
   rerun: () => void;
   stop: () => void;
-  setClamp: (featureId: string, value: number) => void;
-  resetClamps: () => void;
-  selectFeature: (id: string | null) => void;
-  hoverToken: (index: number | null) => void;
-  steer: (checkpointId: number, direction: SteerDirection) => void;
+  hoverReading: (key: string | null) => void;
+  setOpenReading: (key: string | null) => void;
+  // Branches runId (default: the active run) at one of its readings.
+  steer: (checkpointId: number, direction: SteerDirection, runId?: string) => void;
   selectRun: (id: string) => void;
 }
 
@@ -159,20 +178,168 @@ const patchReading = (
         : run;
     }),
   }));
+// The answer is revealed at a reading pace, pausing where a reading's
+// section begins, so each bubble has a moment as the next thing the model
+// is heading into. The server's own pace is much faster.
+const pacing = {
+  charsPerSecond: 55,
+  sectionDwellMs: 1500,
+  // Before the first words: at least startHoldMs, and up to startHoldMaxMs
+  // until a bubble (a reading with its alternatives) is ready.
+  startHoldMs: 4000,
+  startHoldMaxMs: 8000,
+  // At a section, how long to wait for its bubble before going on without it.
+  alternativesWaitMs: 4000,
+};
+/** charsPerSecond 0 shows text as it arrives (tests). */
+export function configurePacing(options: Partial<typeof pacing>) {
+  Object.assign(pacing, options);
+}
+interface Pace {
+  queue: TokenEntry[];
+  shown: number; // code points on screen
+  budget: number; // code points that may be revealed now
+  holdUntil: number;
+  dwelled: Set<number>;
+  final?: Partial<Run>; // status that waits for the text to finish
+  // Frozen while a steer is on its way, so the rest of the answer never
+  // flashes up before the branch replaces it.
+  paused?: boolean;
+  startedAt: number;
+  started?: boolean; // past the hold before the first words
+  waitingSince?: number; // held at a section for its bubble
+}
+// When each run began, for the hold before its first words.
+const runStartedAt = new Map<string, number>();
+/** A reading gets a bubble once its alternatives are ready. */
+export const hasBubble = (reading: Reading) => !reading.error && !!reading.alternatives?.length;
+const TICK_MS = 50;
+const paces = new Map<string, Pace>();
+let ticker: ReturnType<typeof setTimeout> | null = null;
+const appendTokens = (runId: string, tokens: TokenEntry[]) =>
+  useStreamStore.setState((state) => ({
+    runs: state.runs.map((item) =>
+      item.id === runId ? { ...item, tokens: [...item.tokens, ...tokens] } : item,
+    ),
+  }));
+function enqueue(runId: string, token: TokenEntry) {
+  if (pacing.charsPerSecond <= 0) return appendTokens(runId, [token]);
+  let pace = paces.get(runId);
+  if (!pace) {
+    const run = useStreamStore.getState().runs.find((item) => item.id === runId);
+    pace = {
+      queue: [],
+      shown: codePointLength(run?.tokens.map((item) => item.text).join("") ?? ""),
+      budget: 0,
+      holdUntil: 0,
+      dwelled: new Set(),
+      startedAt: runStartedAt.get(runId) ?? Date.now(),
+    };
+    paces.set(runId, pace);
+  }
+  pace.queue.push(token);
+  if (ticker === null) ticker = setTimeout(tick, TICK_MS);
+}
+// Status for a run whose text is still being revealed waits for it.
+function finish(runId: string, patch: Partial<Run>) {
+  const pace = paces.get(runId);
+  if (pace?.queue.length) pace.final = patch;
+  else patchRun(runId, patch);
+}
+// Text Stop never showed, kept so a steer from past the visible text still
+// continues its run's full answer.
+const unrevealed = new Map<string, string>();
+/** Stops revealing a run where it is; the rest is never shown. */
+function dropRun(runId: string) {
+  const pace = paces.get(runId);
+  if (!pace) return;
+  paces.delete(runId);
+  if (pace.queue.length) unrevealed.set(runId, pace.queue.map((token) => token.text).join(""));
+}
+/** Shows everything received for a run at once. */
+function flushRun(runId: string) {
+  const pace = paces.get(runId);
+  if (!pace) return;
+  paces.delete(runId);
+  if (pace.queue.length) appendTokens(runId, pace.queue);
+  if (pace.final) patchRun(runId, pace.final);
+}
+function tick() {
+  ticker = null;
+  if (useStreamStore.getState().paused) return; // setPaused(false) restarts it
+  const now = Date.now();
+  for (const [runId, pace] of paces) {
+    if (pace.paused || now < pace.holdUntil) continue;
+    const run = useStreamStore.getState().runs.find((item) => item.id === runId);
+    if (!run) {
+      paces.delete(runId);
+      continue;
+    }
+    const readings = Object.values(run.readings);
+    if (!pace.started) {
+      // Give the first bubble time to surface before any words.
+      const age = now - pace.startedAt;
+      if (age < pacing.startHoldMs || (age < pacing.startHoldMaxMs && !readings.some(hasBubble))) continue;
+      pace.started = true;
+      // The bubbles shown during the hold have had their moment.
+      for (const reading of readings) if (reading.position <= pace.shown) pace.dwelled.add(reading.checkpointId);
+    }
+    pace.budget = Math.min(pace.budget + (pacing.charsPerSecond * TICK_MS) / 1000, pacing.charsPerSecond);
+    const released: TokenEntry[] = [];
+    while (pace.queue.length) {
+      const token = pace.queue[0];
+      const length = codePointLength(token.text);
+      // Pause where a reading's section starts, before revealing it: wait
+      // for its bubble (its alternatives), then give the bubble a moment.
+      const section = readings.find((reading) =>
+        !pace.dwelled.has(reading.checkpointId) && !reading.error &&
+        reading.position >= pace.shown && reading.position < pace.shown + Math.max(1, length));
+      if (section) {
+        const ready = hasBubble(section);
+        if (!ready) {
+          pace.waitingSince ??= now;
+          if (now - pace.waitingSince < pacing.alternativesWaitMs) break;
+        }
+        pace.waitingSince = undefined;
+        pace.dwelled.add(section.checkpointId);
+        if (ready) {
+          pace.holdUntil = now + pacing.sectionDwellMs;
+          break;
+        }
+        continue;
+      }
+      if (pace.budget < length) break;
+      pace.budget -= length;
+      pace.shown += length;
+      released.push(pace.queue.shift()!);
+    }
+    if (released.length) appendTokens(runId, released);
+    if (!pace.queue.length && pace.final) {
+      paces.delete(runId);
+      patchRun(runId, pace.final);
+    }
+  }
+  if ([...paces.values()].some((pace) => !pace.paused && (pace.queue.length || pace.final)))
+    ticker = setTimeout(tick, TICK_MS);
+}
+
 function startBranch(message: Extract<ServerMessage, { type: "branch" }>) {
   const { runs } = useStreamStore.getState();
   const parent = runs.find((item) => item.id === message.parent_run_id);
   if (!parent) return;
+  // Runs frozen for this steer catch up off screen: the branch takes over
+  // the view in the same update. The branch keeps its parent's full text.
+  for (const [runId, pace] of paces) if (pace.paused || runId === parent.id) flushRun(runId);
+  const parentText = useStreamStore.getState().runs.find((item) => item.id === parent.id)?.tokens ?? parent.tokens;
   const reading = parent.readings[message.checkpoint_id];
-  const kept = parent.tokens
+  const text = parentText
     .map((token) => token.text)
-    .join("")
-    .slice(0, message.position);
+    .join("") + (unrevealed.get(parent.id) ?? "");
+  const kept = text.slice(0, codePointToUtf16(text, message.position));
   const run: Run = {
     id: message.run_id,
     prompt: parent.prompt,
     model: parent.model,
-    clamps: {},
     // The parent's text up to the branch point, as one token.
     tokens: kept ? [{ index: -1, text: kept }] : [],
     flags: [],
@@ -183,12 +350,14 @@ function startBranch(message: Extract<ServerMessage, { type: "branch" }>) {
       kind: message.kind,
       focus: message.focus,
       label: reading?.label ?? "",
+      checkpointId: message.checkpoint_id,
       opening: message.opening,
       anchored: message.anchored,
       note: reading?.steerNote,
     },
   };
   history.set(run.id, []);
+  runStartedAt.set(run.id, Date.now());
   useStreamStore.setState((state) => ({
     runs: [
       ...state.runs.map((item) =>
@@ -205,8 +374,7 @@ function startBranch(message: Extract<ServerMessage, { type: "branch" }>) {
       run,
     ],
     activeRunId: run.id,
-    baselineRunId: parent.id,
-    hoveredTokenIndex: null,
+    openReading: null,
   }));
 }
 function handleMessage(message: ServerMessage) {
@@ -258,6 +426,11 @@ function handleMessage(message: ServerMessage) {
           ? { ...reading, steerNote: message.note, steerMessage: undefined }
           : { ...reading, steering: false, steerMessage: message.message }),
       );
+      // A refused steer lets the frozen text carry on.
+      if (!message.applied) {
+        for (const pace of paces.values()) pace.paused = false;
+        if (ticker === null && paces.size) ticker = setTimeout(tick, TICK_MS);
+      }
       break;
     case "steer_score":
       patchRun(runId, {
@@ -268,19 +441,7 @@ function handleMessage(message: ServerMessage) {
       });
       break;
     case "token":
-      useStreamStore.setState((state) => ({
-        runs: state.runs.map((item) =>
-          item.id === runId
-            ? {
-                ...item,
-                tokens: [
-                  ...item.tokens,
-                  { index: message.index, text: message.text },
-                ],
-              }
-            : item,
-        ),
-      }));
+      enqueue(runId, { index: message.index, text: message.text });
       break;
     case "activation":
       activationBus.publish(runId, {
@@ -314,10 +475,18 @@ function handleMessage(message: ServerMessage) {
       break;
     case "status":
       if (message.state === "done" || message.state === "error")
-        patchRun(runId, {
+        finish(runId, {
           status: message.state,
           message: message.message,
+          avDropped: message.av_dropped,
+          inspecting: undefined,
         });
+      else if (message.state === "inspecting" && message.checkpoint_id !== undefined)
+        patchRun(runId, {
+          inspecting: { checkpointId: message.checkpoint_id, label: message.label ?? "" },
+        });
+      else if (message.state === "streaming" && run.inspecting)
+        patchRun(runId, { inspecting: undefined });
       break;
   }
 }
@@ -337,10 +506,6 @@ function connect() {
     retryCount = 0;
     useStreamStore.setState({ connection: "open" });
     if (pendingStart) {
-      if (STEERING_ENABLED)
-        Object.entries(useStreamStore.getState().clamps).forEach(
-          ([feature_id, value]) => send({ type: "clamp", feature_id, value }),
-        );
       send({ type: "start", ...pendingStart });
       pendingStart = null;
     }
@@ -362,11 +527,13 @@ function connect() {
       const run = useStreamStore
         .getState()
         .runs.find((item) => item.id === active);
-      if (run?.status === "streaming")
+      if (run?.status === "streaming") {
+        dropRun(active);
         patchRun(active, {
           status: "error",
           message: "Connection lost. Run again to start a new generation.",
         });
+      }
     }
     if (subscribers === 0) {
       useStreamStore.setState({ connection: "closed" });
@@ -405,7 +572,10 @@ export function mountStreamConnection() {
     socket = null;
     const active = useStreamStore.getState().activeRunId;
     const run = useStreamStore.getState().runs.find((item) => item.id === active);
-    if (run?.status === "streaming") patchRun(run.id, { status: "stopped" });
+    if (run?.status === "streaming") {
+      dropRun(run.id);
+      patchRun(run.id, { status: "stopped" });
+    }
     useStreamStore.setState({ connection: "closed" });
   };
 }
@@ -414,25 +584,28 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   features: {},
   runs: [],
   activeRunId: null,
-  baselineRunId: null,
-  clamps: {},
-  selectedFeatureId: null,
-  hoveredTokenIndex: null,
+  hoveredReading: null,
+  openReading: null,
   hasLiveActivations: false,
+  paused: false,
+  setPaused(paused) {
+    set({ paused });
+    if (!paused && ticker === null && paces.size) ticker = setTimeout(tick, TICK_MS);
+  },
   start(prompt, model) {
     if (!prompt.trim()) return;
+    if (get().paused) get().setPaused(false);
     const previous = get().runs.find((run) => run.id === get().activeRunId);
     if (previous?.status === "streaming") {
       send({ type: "stop" });
+      dropRun(previous.id);
       patchRun(previous.id, { status: "stopped" });
     }
     const id = crypto.randomUUID();
-    const clamps = { ...get().clamps };
     const run: Run = {
       id,
       prompt: prompt.trim(),
       model,
-      clamps,
       tokens: [],
       flags: [],
       readings: {},
@@ -441,11 +614,10 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
     set((state) => ({
       runs: [...state.runs, run],
       activeRunId: id,
-      baselineRunId:
-        Object.keys(clamps).length === 0 ? id : state.baselineRunId,
-      hoveredTokenIndex: null,
+      openReading: null,
     }));
     history.set(id, []);
+    runStartedAt.set(id, Date.now());
     queued = [];
     pendingStart = { prompt: run.prompt, model, run_id: id };
     // A new prompt gets a new socket, so nothing from an earlier one can
@@ -458,10 +630,6 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
       retryCount = 0;
       connect();
     } else if (socket?.readyState === WebSocket.OPEN) {
-      if (STEERING_ENABLED)
-        Object.entries(clamps).forEach(([feature_id, value]) =>
-          send({ type: "clamp", feature_id, value }),
-        );
       send({ type: "start", ...pendingStart });
       pendingStart = null;
     } else if (!socket && subscribers) connect();
@@ -474,36 +642,28 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
     pendingStart = null;
     send({ type: "stop" });
     const id = get().activeRunId;
-    if (id) patchRun(id, { status: "stopped" });
+    if (!id) return;
+    dropRun(id);
+    patchRun(id, { status: "stopped" });
   },
-  // The current backend rejects steering. Keep pending values local until a
-  // steering-capable backend is explicitly configured.
-  setClamp(featureId, value) {
-    set((state) => {
-      const clamps = { ...state.clamps };
-      if (value === 0) delete clamps[featureId];
-      else clamps[featureId] = value;
-      if (STEERING_ENABLED)
-        send({ type: "clamp", feature_id: featureId, value });
-      return { clamps };
-    });
+  hoverReading(key) {
+    set({ hoveredReading: key });
   },
-  resetClamps() {
-    if (STEERING_ENABLED) send({ type: "reset_clamps" });
-    set({ clamps: {} });
+  setOpenReading(key) {
+    set({ openReading: key });
   },
-  selectFeature(id) {
-    set({ selectedFeatureId: id });
-  },
-  hoverToken(index) {
-    set({ hoveredTokenIndex: index });
-  },
-  // Branches the active run at a reading; the server replies with steer_ack
-  // and, when it applies, a branch event that becomes the new active run.
-  steer(checkpointId, direction) {
-    const run = get().runs.find((item) => item.id === get().activeRunId);
+  // Branches a run at a reading; the server stops whatever is streaming and
+  // replies with steer_ack and, when it applies, a branch event that becomes
+  // the new active run.
+  steer(checkpointId, direction, runId) {
+    const active = get().runs.find((item) => item.id === get().activeRunId);
+    const run = runId ? get().runs.find((item) => item.id === runId) : active;
     if (!run) return;
-    if (run.status === "streaming") patchRun(run.id, { status: "stopped" });
+    if (active?.status === "streaming") {
+      const pace = paces.get(active.id);
+      if (pace) pace.paused = true;
+      patchRun(active.id, { status: "stopped" });
+    }
     patchReading(run.id, checkpointId, (reading) =>
       reading && {
         ...reading,
@@ -524,10 +684,34 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   selectRun(id) {
     const run = get().runs.find((item) => item.id === id);
     if (!run) return;
-    set({
-      activeRunId: id,
-      baselineRunId: run.parentRunId ?? get().baselineRunId,
-      hoveredTokenIndex: null,
-    });
+    set({ activeRunId: id, openReading: null });
   },
 }));
+
+/** The readings along the active run's path, oldest first. */
+export function readingChain(runs: readonly Run[], activeRunId: string | null): ChainEntry[] {
+  const path: Run[] = [];
+  for (let run = runs.find((item) => item.id === activeRunId); run; ) {
+    path.unshift(run);
+    const parentId = run.parentRunId;
+    run = parentId ? runs.find((item) => item.id === parentId) : undefined;
+  }
+  const chain: ChainEntry[] = [];
+  path.forEach((run, index) => {
+    const child = path[index + 1];
+    const cut = child?.steer?.checkpointId;
+    const readings = Object.values(run.readings).sort((a, b) => a.checkpointId - b.checkpointId);
+    for (const reading of readings) {
+      if (cut !== undefined && reading.checkpointId > cut) break;
+      chain.push({
+        runId: run.id,
+        reading,
+        forkedTo: cut === reading.checkpointId ? child.steer : undefined,
+        leftBehind: cut === reading.checkpointId
+          ? readings.filter((other) => other.checkpointId > cut).length
+          : undefined,
+      });
+    }
+  });
+  return chain;
+}

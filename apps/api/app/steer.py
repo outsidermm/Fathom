@@ -13,6 +13,11 @@ replayed under the steer, and the steer lets go where the opening ends. On
 real answers the steer alone kept the text fluent and left the current focus,
 but reached the named target only about a third of the time; anchored, the
 section follows it. Away has no single destination, so it is not anchored.
+
+Some directions push Qwen into a loop ("and and and", "Tal?>>[Tal?>>["). The
+first stretch of every steered section is held back and checked; a looping
+one is thrown away and regenerated from the same direction at half and then
+a quarter of its size, and if that still loops, without the new steer.
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ import logging
 import os
 import re
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 import httpx
 
@@ -58,6 +63,26 @@ _OPENING = re.compile(
     r"^(?P<head>\s*(?:#{1,6}\s*)?(?:(?:Step\s+)?\d{1,2}[.):]\s*)?(?:\*\*)?)"
     r"(?P<title>.*?)(?P<tail>(?:\*\*)?\s*:?\s*)$"
 )
+
+
+# Steered text held back and checked for a loop before any of it is sent.
+_GUARD_CHARS = 200
+# The new steer's size on each try; None: without it (the unsteered text).
+_GUARD_SCALES: tuple[float | None, ...] = (1.0, 0.5, 0.25, None)
+# A short unit repeated back to back ("and and and ", "Tal?>>[Tal?>>[").
+_LOOP = re.compile(r"(\S.{0,15}?)\1{4,}", re.S)
+
+
+def degenerate(text: str) -> bool:
+    """Whether steered text has fallen into a loop or out of language."""
+    # Units with a letter, so table rules and dividers ("| --- | --- |") pass.
+    if any(len(match.group(0)) >= 24 and re.search("[A-Za-z]", match.group(1)) for match in _LOOP.finditer(text)):
+        return True
+    words = re.findall(r"[A-Za-z']+", text)
+    if len(words) >= 12 and len({word.lower() for word in words}) / len(words) < 0.35:
+        return True
+    odd = sum(1 for char in text if not (char.isalnum() or char.isspace() or char in ".,:;!?'\"()-*#/&%$"))
+    return len(text) >= 40 and odd / len(text) > 0.2
 
 
 def _sidecar() -> tuple[str, dict[str, str]]:
@@ -138,18 +163,15 @@ def _branch_point(state: RunState, checkpoint_id: int):
     return sections[0] if sections else None
 
 
-async def _steered_deltas(
+async def _sidecar_stream(
     client: httpx.AsyncClient, prompt: str, prefix: str, steers: list[dict], new: dict,
-    anchor: str = "",
 ) -> AsyncIterator[str]:
-    """The anchor, then text deltas from the sidecar's /steer; records where
-    an unanchored steer let go."""
-    if anchor:
-        yield anchor
+    """Text deltas from the sidecar's /steer; records where an unanchored
+    steer let go."""
     url, headers = _sidecar()
     async with client.stream(
         "POST", f"{url}/steer", headers=headers,
-        json={"prompt": prompt, "prefix": prefix + anchor, "steers": steers},
+        json={"prompt": prompt, "prefix": prefix, "steers": steers},
     ) as response:
         response.raise_for_status()
         async for line in response.aiter_lines():
@@ -160,6 +182,61 @@ async def _steered_deltas(
                 new["end_char"] = event["released"]
             elif event.get("text"):
                 yield event["text"]
+
+
+async def _steered_deltas(
+    client: httpx.AsyncClient, prompt: str, prefix: str, steers: list[dict], new: dict,
+    anchor: str = "", remake: Callable[[float], Awaitable[str]] | None = None,
+) -> AsyncIterator[str]:
+    """The anchor, then the steered text, its first stretch checked for a
+    loop. ``steers`` ends with ``new``; a retry swaps new's direction for a
+    smaller one (``remake``), or drops it, in place, so the run's readings
+    replay what was actually generated."""
+    if anchor:
+        yield anchor
+    released = new.get("end_char")
+    for scale in _GUARD_SCALES:
+        if scale is None:
+            steers.remove(new)
+        elif scale != 1.0:
+            if remake is None:
+                continue
+            try:
+                new["direction_id"] = await remake(scale)
+            except (httpx.HTTPError, KeyError, ValueError) as exc:
+                logger.warning("smaller steer unavailable: %s", exc)
+                continue
+        if released is None:
+            new.pop("end_char", None)
+        held: str | None = ""
+        stream = _sidecar_stream(client, prompt, prefix + anchor, steers, new)
+        try:
+            async for text in stream:
+                if held is None:
+                    yield text
+                    continue
+                held += text
+                if len(held) < _GUARD_CHARS:
+                    continue
+                if degenerate(held) and scale is not None:
+                    break
+                yield held
+                held = None
+            else:
+                if held is not None and degenerate(held) and scale is not None:
+                    raise _Looped
+                if held:
+                    yield held
+                return
+        except _Looped:
+            pass
+        finally:
+            await stream.aclose()
+        logger.warning("steered text looped at scale %s; retrying smaller", scale)
+
+
+class _Looped(Exception):
+    """The steered text looped before the stream ended."""
 
 
 async def run_steer(
@@ -233,12 +310,18 @@ async def _run_steer(
         # Steers still shaping the kept prefix; later ones belong to the text being replaced.
         inherited = [steer for steer in parent.steers if steer["start_char"] < len(prefix)]
         url, headers = _sidecar()
-        response = await client.post(f"{url}/contrast", headers=headers, json={
+        contrast = {
             "prompt": parent.prompt, "prefix": prefix, "original": original,
             "targets": targets, "steers": inherited,
-        })
-        response.raise_for_status()
-        direction_id = response.json()["direction_id"]
+        }
+
+        async def make_direction(scale: float = 1.0) -> str:
+            body = contrast if scale == 1.0 else {**contrast, "scale": scale}
+            response = await client.post(f"{url}/contrast", headers=headers, json=body)
+            response.raise_for_status()
+            return response.json()["direction_id"]
+
+        direction_id = await make_direction()
     except (httpx.HTTPError, KeyError, ValueError) as exc:
         logger.warning("steer setup failed: %s", exc)
         await refuse(f"Steering unavailable: {type(exc).__name__}")
@@ -268,7 +351,7 @@ async def _run_steer(
 
     await run_qwen_stream(
         parent.prompt, send_child, pace=pace, state=child,
-        deltas=_steered_deltas(client, parent.prompt, prefix, child.steers, new, anchor),
+        deltas=_steered_deltas(client, parent.prompt, prefix, child.steers, new, anchor, make_direction),
     )
     await _score(client, parent, child, checkpoint, reading["explanation"], target_note, send_child)
 

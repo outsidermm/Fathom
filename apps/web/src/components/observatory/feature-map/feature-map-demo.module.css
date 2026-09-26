@@ -34,6 +34,3 @@
 .tokens button:focus-visible { outline: 3px solid var(--harbor, #0e6398); outline-offset: 2px; }
 .tokens .flaggedToken { text-decoration: underline; text-decoration-color: var(--alert, #e84f27); text-decoration-thickness: 2px; text-underline-offset: 4px; }
 .flaggedToken span { color: var(--alert, #e84f27); }
-.diagnostics { margin-top: 1.5rem; }
-.diagnostics h3 { margin: 0 0 .4rem; font-family: var(--font-display, "Darumadrop One"), sans-serif; font-size: 1.5rem; color: var(--ink, #055958); }
-.diagnostics > p { margin: 0 0 .8rem; font-size: .875rem; }

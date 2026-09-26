@@ -1,21 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { TopBar } from "@/components/observatory/top-bar";
 import { PromptConsole } from "@/components/observatory/prompt-console";
 import { TokenStream } from "@/components/observatory/token-stream";
-import { AvReadings } from "@/components/observatory/av-readings";
-import { FeatureInspector } from "@/components/observatory/feature-inspector";
-import { ClampTray } from "@/components/observatory/clamp-tray";
-import { ConnectedFeatureMap, ConnectedDiagnosticsFeed, ConnectedFeatureSearch } from "@/components/observatory/connected-deep";
-import { RunCompare } from "@/components/observatory/run-compare";
+import { ConnectedFeatureMap } from "@/components/observatory/connected-deep";
 import { CoachMarks } from "@/components/observatory/coach-marks";
-import { mountStreamConnection } from "@/lib/stream-store";
-import type { Model } from "@/lib/contract";
+import { ThoughtCurrent } from "@/components/observatory/thought-current/thought-current";
+import { mountStreamConnection, useStreamStore } from "@/lib/stream-store";
+
+// `?features=test` shows the fish-brain feature map with a fake layout.
+function useFeatureTestFlag() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => new URLSearchParams(window.location.search).get("features") === "test",
+    () => false,
+  );
+}
 
 export function Observatory() {
-  const [model, setModel] = useState<Model>("qwen2.5-7b");
-  const [motionPaused, setMotionPaused] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const paused = useStreamStore((state) => state.paused);
+  const start = useStreamStore((state) => state.start);
+  // The fish-brain map only has something to show once the API streams
+  // activations (or with the test layout); until then the page fits one screen.
+  const liveActivations = useStreamStore((state) => state.hasLiveActivations);
+  const showInternals = useFeatureTestFlag() || liveActivations;
   useEffect(() => mountStreamConnection(), []);
   return (
     <>
@@ -27,32 +37,29 @@ export function Observatory() {
       </a>
       <main
         id="main-content"
-        className={`mx-auto flex min-h-screen max-w-[1600px] flex-col gap-4 bg-sand px-4 py-4 text-ink sm:px-6 ${motionPaused ? "motion-paused" : ""}`}
+        className={`mx-auto flex w-full max-w-[1800px] flex-col gap-3 bg-sand p-3 text-ink sm:px-4 ${showInternals ? "min-h-svh" : "min-h-svh lg:h-svh"} ${paused ? "motion-paused" : ""}`}
       >
         <CoachMarks />
-        <TopBar
-          model={model}
-          onModelChange={setModel}
-          motionPaused={motionPaused}
-          onMotionChange={setMotionPaused}
-        />
-        <PromptConsole model={model} />
-        <div className="flex flex-wrap gap-2">
-          <ConnectedFeatureSearch />
-          <RunCompare />
-        </div>
-        <div className="grid min-h-[560px] flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
-          <div className="grid content-start grid-rows-[auto_auto_auto] gap-4">
-            <ConnectedFeatureMap paused={motionPaused} model={model} />
-            <TokenStream />
-            <AvReadings />
+        <TopBar>
+          <PromptConsole prompt={prompt} onPromptChange={setPrompt} />
+        </TopBar>
+        <div className={`grid gap-3 lg:grid-cols-[minmax(0,1.7fr)_minmax(360px,1fr)] ${showInternals ? "lg:h-[calc(100svh-7rem)]" : "min-h-0 flex-1"}`}>
+          <div className="relative h-[62svh] min-h-[460px] lg:h-auto">
+            <ThoughtCurrent
+              paused={paused}
+              onSample={(sample) => {
+                setPrompt(sample);
+                start(sample, "qwen2.5-7b");
+              }}
+            />
           </div>
-          <aside data-coach-target="controls" className="flex flex-col gap-4">
-            <FeatureInspector />
-            <ClampTray />
-            <ConnectedDiagnosticsFeed />
-          </aside>
+          <TokenStream />
         </div>
+        {showInternals && (
+          <section aria-label="Feature map">
+            <ConnectedFeatureMap paused={paused} model="qwen2.5-7b" />
+          </section>
+        )}
       </main>
     </>
   );
