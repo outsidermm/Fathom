@@ -13,7 +13,7 @@ and steering events. Those events are still pending in the backend.
 
 See `AGENTS.md` for frontend AI-assistant guidelines, `docs/api-contract.md`
 for the interface both sides build against, and
-[`docs/deployment.md`](docs/deployment.md) for the hosted Vercel/Render/Runpod
+[`docs/deployment.md`](docs/deployment.md) for the hosted Vercel/Runpod
 setup so the whole team (not just whoever has a tunnel open) can hit a live
 URL. Design: see [docs/design-system.md](docs/design-system.md). Samuel's
 frontend work follows the phases in
@@ -30,7 +30,8 @@ apps/web/    Next.js + TypeScript + shadcn/ui frontend
 apps/api/    FastAPI backend — live Qwen text bridge; activation stream pending
 docs/        API contract, Runpod runbook, deployment guide, orchestration design
 docker-compose.yml   Postgres (local dev)
-render.yaml  Render Blueprint — provisions the hosted API + Postgres
+vercel.json  Vercel Services — web + API on one domain, API duration 300s
+render.yaml  Previous Render Blueprint (retained alongside apps/api/Dockerfile)
 ```
 
 ## Quick start
@@ -77,18 +78,33 @@ docker compose up -d
 
 ## Deployed
 
-Once set up per [`docs/deployment.md`](docs/deployment.md), the team shares
-one live URL instead of everyone needing their own tunnel:
+Follow [`docs/deployment.md`](docs/deployment.md) to create one Vercel project
+from the repository root using **Services (Beta)**:
 
-- Frontend: Vercel (fill in once deployed)
-- API: Render (fill in once deployed)
+- Frontend: `https://<project>.vercel.app/` (fill in once deployed)
+- API: `/api/health`, `/api/features`, and `/ws/stream` on the same domain
+
+Set `QWEN_API_BASE`, `QWEN_API_KEY`, `QWEN_MODEL`, and `CORS_ORIGINS` in the
+project's environment settings. James must supply a Qwen HTTPS URL
+reachable from Vercel. Explicitly set `NEXT_PUBLIC_API_BASE` to an empty string
+and `NEXT_PUBLIC_WS_URL=/ws/stream`, then rebuild. Unset values still fall
+back to localhost for local development. `CORS_ORIGINS` controls HTTP CORS
+only; the current WebSocket accepts any origin and has no authentication.
+
+Services uses Fluid Compute by default; the API has a 300-second connection
+limit. Long generations or idle tabs can hit that limit; the current frontend
+requires a page reload to reconnect. See the deployment guide for plan
+limits and validation steps. Hosted Postgres is deferred; nothing reads
+`DATABASE_URL` yet. Deployment requires a Vercel account with repo access
+and Services Beta availability; the guide documents the two-project fallback.
 
 ## Status
 
 - [x] Repo scaffolded, frontend and backend build/typecheck clean
 - [x] Legacy WebSocket with a tested live Qwen text bridge
-- [x] Dockerfile + Render Blueprint + Vercel setup so the API/DB and
-      frontend deploy to shared URLs (`docs/deployment.md`)
+- [x] Vercel configuration and guide for frontend + API; previous Dockerfile
+      and Render Blueprint retained (`docs/deployment.md`)
+- [ ] Validate hosted Qwen streaming and WebSocket duration/reconnect behavior
 - [ ] Runpod reachable from the hosted API (currently a private tunnel;
       James is bridging this — see `docs/deployment.md` §3)
 - [ ] Real activation events and steering in the current WebSocket contract
