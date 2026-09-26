@@ -148,7 +148,7 @@ export function RunCompare() {
           {ready && diff && (
             <>
               <div className="grid gap-4 md:grid-cols-2">
-                <PaperNote pin={false} rotate={-0.5}>
+                <PaperNote pin={false}>
                   <h3 className="mb-2 font-ui text-lg font-bold text-harbor">
                     Baseline
                   </h3>
@@ -161,7 +161,7 @@ export function RunCompare() {
                     mode="removed"
                   />
                 </PaperNote>
-                <PaperNote pin={false} rotate={0.5}>
+                <PaperNote pin={false}>
                   <h3 className="mb-2 font-ui text-lg font-bold text-harbor">
                     Steered: {label}
                   </h3>

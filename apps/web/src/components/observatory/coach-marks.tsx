@@ -172,7 +172,6 @@ export function CoachMarks() {
       >
         <PaperNote
           pin
-          rotate={step === 1 ? 0.5 : -0.5}
           className="max-h-[calc(100vh-32px)] overflow-auto pt-7"
         >
           <p className="font-mono text-xs text-muted-foreground">

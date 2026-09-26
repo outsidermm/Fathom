@@ -12,7 +12,8 @@
   font-size: .75rem;
   pointer-events: none;
 }
-.strength { display: flex; align-items: center; gap: .5rem; }
+.caption { margin: 0 0 .35rem; }
+.strength { white-space: nowrap; display: flex; align-items: center; gap: .5rem; }
 .ramp { display: flex; gap: 3px; }
 .ramp span { width: 9px; height: 9px; border-radius: 50%; }
 .keys { display: flex; flex-wrap: wrap; gap: .45rem .8rem; margin-top: .45rem; }

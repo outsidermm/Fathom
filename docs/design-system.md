@@ -152,7 +152,7 @@ light surfaces and `--foam` on wood (with the §6 text-shadow).
 
 ## 6. Surfaces and component styling
 
-Everything is rounded, a little tilted, and physically layered: things sit
+Everything is rounded and physically layered: things sit
 *on* sand, get *pinned to* wood, or *float in* water. No hard 1px gray
 borders anywhere.
 
@@ -162,7 +162,7 @@ borders anywhere.
 | **GoldButton** (primary CTA) | "Register" | `--gold` fill, `--gold-ink` Sen 700, radius 12px, bottom "lip" `box-shadow: 0 4px 0 #c99a4e`. On press: `translateY(3px)`, lip shrinks to 1px |
 | **PlankButton** (secondary) | wooden "Register" sign | `--plank` with a wood-grain gradient (§6a), `--driftwood` text, rotate −1.5deg, a small leaf/rope decoration optional |
 | **CrateTabs** | Day 1 / Day 2 / Day 3 | Tab group on a `--crate` slatted backdrop. Active: `--driftwood` fill, `--crate` text. Inactive: transparent with a 2px `--foam` outline and `--foam` text (large text only). Built on Radix Tabs |
-| **PaperNote** | pinned schedule paper | `--paper`, radius 4px, rotate between −1.5 and 1.5deg, pin dot at the top center, shadow `0 10px 24px rgb(80 49 32 / 0.18)`. Title in Sen `--harbor` with a `--coral` 3px underline squiggle |
+| **PaperNote** | pinned schedule paper | `--paper`, radius 4px, always aligned with no hover transform, pin dot at the top center, shadow `0 10px 24px rgb(80 49 32 / 0.18)`. Title in Sen `--harbor` with a `--coral` 3px underline squiggle |
 | **Plank** (accordion row) | FAQ planks | full-width `--plank` bar, radius 10px, irregular edges via `clip-path` or an SVG mask, `--plank-dark` bottom edge, `--driftwood` Sen text, chevron right. Built on Radix Accordion |
 | **Chalkboard** | "Registration open until…" sign | `#2a2a2a` board, `--plank` frame, `--foam` Sen text. Use for empty and connection states ("Waiting for the tide…") |
 | **WaveDivider** | every section boundary | SVG wave path with a white foam stroke, drifting horizontally (§7). Used above the Deep |
@@ -190,7 +190,6 @@ motion stays slow and small. Interactive motion is quick and springy.
 |---|---|---|
 | `drift` | WaveDivider, caustics | `translateX` loop, 14s linear infinite, alternating direction per layer (parallax) |
 | `bob` | decorations (starfish, shells), empty-state chalkboard | `translateY(0 → -4px)`, 3.2s ease-in-out infinite alternate; stagger delays |
-| `sway` | PaperNote on hover | rotate to 0deg and lift 2px, 180ms spring |
 | `press` | GoldButton / PlankButton | `translateY(3px)`, 90ms |
 | `settle` | panels entering | fade plus `translateY(12px → 0)`, 320ms `cubic-bezier(.2,.8,.2,1)`, 40ms stagger |
 | `pulse` | feature fires on the map | radius 1× → 1.8× and opacity 1 → 0 ring, 600ms ease-out; the node itself decays from its glow step back down over ~1.5s |

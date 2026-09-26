@@ -416,11 +416,11 @@ function FeatureMapInner({
             aria-describedby={hoveredId === feature.id ? tooltipId : undefined}
             onClick={() => select(feature.id)} onFocus={() => setKeyboardId(feature.id)} onBlur={() => setKeyboardId(null)} />
         ))}
-        <p id={instructionsId} className={styles.instructions}>Arrow keys explore · Enter selects</p>
+        <p id={instructionsId} className={styles.srOnly}>Arrow keys explore · Enter selects</p>
         {features.length === 0 ? <p className={styles.empty}>Waiting for feature positions…</p> : null}
         {tooltipFeature ? (
           <div ref={tooltipRef} className={styles.tooltip} role="tooltip" id={tooltipId}>
-            <PaperNote title={tooltipFeature.label} pin={false} rotate={0}>
+            <PaperNote title={tooltipFeature.label} pin={false}>
               <p>{tooltipFeature.cluster} · Activation <span ref={tooltipValueRef}>0.00</span></p>
               {clamps[tooltipFeature.id] ? <p>Clamped {clamps[tooltipFeature.id] > 0 ? "+" : ""}{clamps[tooltipFeature.id]}</p> : null}
             </PaperNote>

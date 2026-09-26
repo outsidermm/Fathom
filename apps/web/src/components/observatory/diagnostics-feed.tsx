@@ -4,6 +4,7 @@ import * as Accordion from "@radix-ui/react-accordion";
 import { memo, useMemo } from "react";
 
 import type { ActivationSource, MapActivation, MapFeature, MapFlag, MapToken } from "./feature-map/fake-activation-bus";
+import { PanelEmptyState } from "./panel-empty-state";
 import styles from "./diagnostics-feed.module.css";
 
 const percent = new Intl.NumberFormat("en", { style: "percent", maximumFractionDigits: 0 });
@@ -50,7 +51,7 @@ export const DiagnosticsFeed = memo(function DiagnosticsFeed({
   const tokensByIndex = useMemo(() => new Map(tokens.map((token) => [token.index, token.text])), [tokens]);
 
   if (!activeRunId || flags.length === 0) {
-    return <p className={styles.empty}>{activeRunId ? "No flags in this run." : "Run a prompt to see flagged tokens here."}</p>;
+    return <PanelEmptyState>{activeRunId ? "No flags in this run." : "Run a prompt to see flagged tokens here."}</PanelEmptyState>;
   }
 
   return (

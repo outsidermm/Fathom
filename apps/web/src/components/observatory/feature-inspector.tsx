@@ -35,7 +35,7 @@ export function FeatureInspector() {
   );
   if (!id)
     return (
-      <PaperNote rotate={0.6} className="min-h-44">
+      <PaperNote className="min-h-44">
         <h2 className="font-ui text-lg font-bold text-harbor">
           Feature inspector
         </h2>
@@ -57,7 +57,7 @@ export function FeatureInspector() {
   );
   const explanation = data.at(-1)?.explanation;
   return (
-    <PaperNote rotate={0.6} className="min-h-56">
+    <PaperNote className="min-h-56">
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="font-ui text-lg font-bold text-harbor">

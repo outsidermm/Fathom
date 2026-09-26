@@ -37,5 +37,4 @@
 .feature:hover { background: var(--sand-light, #f8eee1); }
 .value { font-variant-numeric: tabular-nums; font-family: var(--font-mono, monospace); }
 .details .explanation { margin: .4rem .65rem; font-style: italic; }
-.empty { margin: 0; padding: 1rem; background: var(--paper, #f6efec); color: var(--driftwood, #503120); border: 1px dashed var(--crate, #c5a97c); border-radius: 10px; }
 @media (prefers-reduced-motion: reduce) { .chevron { transition: none; } }
