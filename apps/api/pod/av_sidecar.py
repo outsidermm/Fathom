@@ -19,10 +19,9 @@ import httpx
 import torch
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from nla_inference import NLAClient
 from pydantic import BaseModel, Field
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
-from nla_inference import NLAClient
 
 QWEN_PATH = os.environ.get("QWEN_PATH", "/workspace/models/qwen2.5-7b-instruct")
 AV_PATH = os.environ.get("AV_PATH", "/workspace/models/nla-av")

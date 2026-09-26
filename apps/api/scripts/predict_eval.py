@@ -136,7 +136,9 @@ async def main() -> None:
                     jobs.append(("opening", i, phrase(client, prompt, answer[:cut], last_token=True)))
                 jobs.append(("heading_text_only", i, summarize_focus(heading, client=client)))
             labels = await asyncio.gather(*(job for _, _, job in jobs))
-            await asyncio.gather(*(score(v, i, l) for (v, i, _), l in zip(jobs, labels)))
+            await asyncio.gather(
+                *(score(variant, index, label) for (variant, index, _), label in zip(jobs, labels))
+            )
 
         # Plan: which prompt-end position, and does sample agreement predict accuracy?
         for index, (prompt, answer) in enumerate(zip(PROMPTS, answers)):

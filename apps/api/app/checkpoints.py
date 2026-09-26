@@ -7,7 +7,6 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-
 _STEP = re.compile(r"(?m)^[ \t]*(?:#{1,6}[ \t]*)?(\d{1,2})[.)][ \t]+(?=(?:\*\*)?[A-Z])")
 _HEADING = re.compile(r"(?m)^#{1,6}[ \t]+(?!\d{1,2}[.)])\S.*$")
 _SENTENCE_START = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'(*])")
