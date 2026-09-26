@@ -86,11 +86,19 @@ class AVEvent(BaseModel):
     explanation: str
     layer: Literal[20] = 20
     sample: Literal["replayed_last_content_token"] = "replayed_last_content_token"
+    checkpoint_id: int = Field(ge=0)
+    position: int = Field(ge=0)
+    label: str
+    replay_ms: Optional[int] = None
+    av_ms: Optional[int] = None
 
 
 class AVErrorEvent(BaseModel):
     type: Literal["av_error"] = "av_error"
     message: str
+    checkpoint_id: int = Field(ge=0)
+    position: int = Field(ge=0)
+    label: str
 
 
 class StatusEvent(BaseModel):
