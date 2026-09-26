@@ -20,6 +20,24 @@ The 3D fish-brain feature map is ready for activation events (`?features=test`
 shows it with a test layout). The backend does not emit those events yet, and
 `/api/features` serves placeholder data.
 
+## Results
+
+In a live 43-case benchmark across 20 prompts, the steered branch reached its
+requested direction and ended within its token cap in 21 cases; an identical
+branch with the same anchored opening but no activation steer did so in 19.
+Re-prompting from the start succeeded in 22. Among the 16 cases where both
+steering and re-prompting succeeded, steering used a median 46% fewer generated
+tokens. The anchor-only branch saved a similar 47% on its 15 paired successes;
+steering used 3% more tokens than anchor-only on their 19 paired successes.
+These results support keeping the answer prefix at a checkpoint, but do not
+establish a separate token-saving benefit from the activation vector.
+
+This small, model-judged benchmark has multiple cases per prompt, asymmetric
+answer scoring, and many generations that hit the token cap. The steered timing
+also includes its AV readings and AR score, so the timing columns do not
+compare like-for-like latency. See the
+[full method, cases, and example outputs](docs/benchmarks/steer-tokens.md).
+
 ## Team
 
 | Person | Owns |
