@@ -1,3 +1,5 @@
 project-includes = ["apps/api"]
 search-path = ["apps/api"]
 python-interpreter-path = "apps/api/.venv/bin/python"
+# Runs on the Runpod Pod with torch/transformers/nla_inference, not in the local venv.
+project-excludes = ["apps/api/pod"]
