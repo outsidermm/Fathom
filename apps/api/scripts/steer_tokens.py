@@ -442,7 +442,7 @@ def report(cases: list[Case]) -> str:
         lines += [f"### {c.prompt}", "", f"Branch at *{c.title}* ({c.bucket}, {c.prefix_tokens} tokens kept), toward *{c.target['focus']}*.", ""]
         for arm in ARMS:
             text = c.arms[arm]["text"] if arm == "R" else section(c.arms[arm]["text"], 0)
-            quoted = "\n".join("> " + line for line in text[:600].strip().splitlines())
+            quoted = "\n".join("> " + line if line else ">" for line in text[:600].strip().splitlines())
             lines += [f"**{arm} {ARM_NAMES[arm]}** ({c.arms[arm]['generated']} tokens, judge: {c.arms[arm]['follows']}):", "", quoted, ""]
     return "\n".join(lines)
 

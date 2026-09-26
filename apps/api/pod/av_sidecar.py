@@ -490,4 +490,3 @@ def steer(request: SteerRequest):
         yield orjson.dumps({"done": True, "tokens": len(generated), "end_char": end_char}) + b"\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
-
