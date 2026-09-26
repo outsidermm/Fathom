@@ -2,10 +2,12 @@
 
 Run with Transformers 4.x and the upstream ``nla_inference.py`` on PYTHONPATH.
 Models load at startup, so /health answers only once requests can be served.
+Set AV_API_KEY whenever the port is reachable beyond loopback.
 """
 
 from __future__ import annotations
 
+import hmac
 import os
 import re
 import threading
@@ -15,7 +17,8 @@ from functools import lru_cache
 
 import httpx
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -27,6 +30,8 @@ AV_URL = os.environ.get("AV_URL", "http://127.0.0.1:30002")
 REPLAY_DEVICE = os.environ.get("QWEN_REPLAY_DEVICE", "cuda:0")
 LAYER = 20
 AV_MAX_TOKENS = int(os.environ.get("AV_MAX_TOKENS", "96"))
+# Required on every request except /health when set.
+AV_API_KEY = os.environ.get("AV_API_KEY")
 
 # Guards only the replay forward pass. AV generation runs outside it so that
 # concurrent requests can batch in the AV SGLang server.
@@ -54,6 +59,15 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Qwen activation verbalizer", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def require_key(request: Request, call_next):
+    if request.url.path != "/health" and AV_API_KEY:
+        supplied = request.headers.get("authorization", "")
+        if not hmac.compare_digest(supplied.encode(), f"Bearer {AV_API_KEY}".encode()):
+            return JSONResponse({"detail": "unauthorized"}, status_code=401)
+    return await call_next(request)
 
 
 class ExplainRequest(BaseModel):
