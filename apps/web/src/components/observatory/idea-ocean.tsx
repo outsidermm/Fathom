@@ -38,7 +38,7 @@ export function IdeaOcean({ paused }: { paused: boolean }) {
       return;
     }
     if (!startGuided(text)) {
-      setError("This direction is too long for the current request. Shorten it and try again.");
+      setError("The request is too long to add a direction. Start with a shorter question.");
       return;
     }
     setError("");

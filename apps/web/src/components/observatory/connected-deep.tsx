@@ -91,7 +91,7 @@ export function ConnectedFeatureMap({ paused }: { paused: boolean }) {
   }, [paused]);
 
   if (features.length === 0) {
-    return <div data-coach-target="map" className={styles.host}><IdeaOcean paused={paused} /></div>;
+    return <div data-coach-target="map" className={styles.host}><IdeaOcean key={runId ?? "empty"} paused={paused} /></div>;
   }
 
   return <div ref={host} data-coach-target="map" className={`${styles.host} ${paused ? styles.paused : ""}`}>
