@@ -57,9 +57,9 @@ they're written to be pasted into a prompt: https://vercel.com/design/guidelines
 
 1. **Build against `docs/api-contract.md` — that's the real contract for
    this weekend.** `apps/api`'s WebSocket now streams live Qwen answer text
-   through the existing event shape; feature data is still placeholder and
-   activation steering is not connected. The separate "conversation harness"
-   design in `docs/target-harness-contract.md` (durable conversations,
+   through the existing event shape; AV readings and steering are connected,
+   while feature-map data is still placeholder. The separate "conversation
+   harness" design in `docs/target-harness-contract.md` (durable conversations,
    branches, attachments, tool calls) is a possible **post-hackathon**
    direction the team passed on for HackGT 13. Don't build toward it or
    treat `docs/api-contract.md` as if it describes those routes.

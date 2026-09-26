@@ -1,10 +1,10 @@
 # Interpretability Observatory — HackGT 13, Oracle of the Deep
 
-Watch Qwen2.5-7B think while it answers, and steer it mid-answer. Answers
-stream live from SGLang. Before each section, the browser shows what the
-model was focused on: a Natural Language Autoencoder (NLA) activation
-verbalizer reads Qwen's replayed layer-20 state. Qwen also suggests 2-3 other
-directions it could take. Click one, or type your own, and the answer
+Watch Qwen2.5-7B answer while seeing summaries of its internal activations,
+and steer it mid-answer. Answers stream live from SGLang. Before each section,
+the browser shows an interpretation of Qwen's replayed layer-20 state from a
+Natural Language Autoencoder (NLA) activation verbalizer. Qwen also suggests
+2-3 other directions it could take. Click one, or type your own, and the answer
 branches from that point. The kept text stays, and a block-20 contrastive
 activation steer, anchored with the new section's opening, redirects what
 follows. Branches can be steered again.
@@ -92,8 +92,9 @@ npm run dev
 ```
 
 Open http://localhost:3000, type a prompt, and press run. With the A100 and
-SSH tunnel active, the answer streams from Qwen. The activation map and
-steering are still pending; the UI does not claim they are live.
+SSH tunnel active, the answer streams from Qwen with live AV readings,
+alternatives, and steerable branches. The 3D activation map still uses
+placeholder data.
 
 ## Deployed
 
