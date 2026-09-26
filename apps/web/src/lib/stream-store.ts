@@ -13,6 +13,7 @@ import {
   type SteerDirection,
   type SteerScore,
 } from "@/lib/contract";
+import { codePointLength, codePointToUtf16 } from "@/lib/code-points";
 
 export type RunStatus = "streaming" | "done" | "error" | "stopped";
 export interface TokenEntry {
@@ -53,6 +54,7 @@ export interface SteerInfo {
   kind: "toward" | "away";
   focus: string;
   label: string; // the parent reading's label ("Step 1")
+  checkpointId: number; // the parent's checkpoint it branched at
   opening?: string;
   anchored: boolean;
   note?: string;
@@ -70,25 +72,40 @@ export interface Run {
   message?: string;
   parentRunId?: string;
   steer?: SteerInfo;
+  // Paced runs: text is held while this checkpoint's reading is made.
+  inspecting?: { checkpointId: number; label: string };
+  // Readings cancelled because they missed their section.
+  avDropped?: number;
 }
+// One reading on the active run's path: its own readings, after its
+// ancestors' readings up to each branch point.
+export interface ChainEntry {
+  runId: string;
+  reading: Reading;
+  // Set on the reading a later run on the path was steered from, with how
+  // many of this run's later readings that path left behind.
+  forkedTo?: SteerInfo;
+  leftBehind?: number;
+}
+// A reading is addressed across runs as `${runId}:${checkpointId}`.
+export const readingKey = (runId: string, checkpointId: number) =>
+  `${runId}:${checkpointId}`;
 interface StreamStore {
   connection: "connecting" | "open" | "retrying" | "closed";
   features: Record<string, Feature>;
   runs: Run[];
   activeRunId: string | null;
-  baselineRunId: string | null;
-  clamps: Record<string, number>;
-  selectedFeatureId: string | null;
-  hoveredTokenIndex: number | null;
+  // Reading keys: hovered in the ocean or the text, and the one opened to steer.
+  hoveredReading: string | null;
+  openReading: string | null;
   hasLiveActivations: boolean;
   start: (prompt: string, model: Model) => void;
   rerun: () => void;
   stop: () => void;
-  setClamp: (featureId: string, value: number) => void;
-  resetClamps: () => void;
-  selectFeature: (id: string | null) => void;
-  hoverToken: (index: number | null) => void;
-  steer: (checkpointId: number, direction: SteerDirection) => void;
+  hoverReading: (key: string | null) => void;
+  setOpenReading: (key: string | null) => void;
+  // Branches runId (default: the active run) at one of its readings.
+  steer: (checkpointId: number, direction: SteerDirection, runId?: string) => void;
   selectRun: (id: string) => void;
 }
 
@@ -203,8 +220,7 @@ function startBranch(message: Extract<ServerMessage, { type: "branch" }>) {
       run,
     ],
     activeRunId: run.id,
-    baselineRunId: parent.id,
-    hoveredTokenIndex: null,
+    openReading: null,
   }));
 }
 function handleMessage(message: ServerMessage) {
@@ -333,6 +349,7 @@ function connect() {
   ws.onopen = () => {
     if (epoch !== socketEpoch) return;
     retryCount = 0;
+      checkpointId: message.checkpoint_id,
     useStreamStore.setState({ connection: "open" });
     if (pendingStart) {
       send({ type: "start", ...pendingStart });
@@ -408,10 +425,8 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   features: {},
   runs: [],
   activeRunId: null,
-  baselineRunId: null,
-  clamps: {},
-  selectedFeatureId: null,
-  hoveredTokenIndex: null,
+  hoveredReading: null,
+  openReading: null,
   hasLiveActivations: false,
   start(prompt, model) {
     if (!prompt.trim()) return;
@@ -433,9 +448,7 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
     set((state) => ({
       runs: [...state.runs, run],
       activeRunId: id,
-      baselineRunId:
-        Object.keys(clamps).length === 0 ? id : state.baselineRunId,
-      hoveredTokenIndex: null,
+      openReading: null,
     }));
     history.set(id, []);
     queued = [];
@@ -461,7 +474,15 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   stop() {
     pendingStart = null;
     send({ type: "stop" });
+          avDropped: message.av_dropped,
+          inspecting: undefined,
     const id = get().activeRunId;
+      else if (message.state === "inspecting" && message.checkpoint_id !== undefined)
+        patchRun(runId, {
+          inspecting: { checkpointId: message.checkpoint_id, label: message.label ?? "" },
+        });
+      else if (message.state === "streaming" && run.inspecting)
+        patchRun(runId, { inspecting: undefined });
     if (id) patchRun(id, { status: "stopped" });
   },
   // The current backend rejects steering. Keep pending values local until a
@@ -476,20 +497,18 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
       return { clamps };
     });
   },
-  resetClamps() {
-    if (STEERING_ENABLED) send({ type: "reset_clamps" });
-    set({ clamps: {} });
+  hoverReading(key) {
+    set({ hoveredReading: key });
   },
-  selectFeature(id) {
-    set({ selectedFeatureId: id });
+  setOpenReading(key) {
+    set({ openReading: key });
   },
-  hoverToken(index) {
-    set({ hoveredTokenIndex: index });
-  },
-  // Branches the active run at a reading; the server replies with steer_ack
-  // and, when it applies, a branch event that becomes the new active run.
-  steer(checkpointId, direction) {
-    const run = get().runs.find((item) => item.id === get().activeRunId);
+  // Branches a run at a reading; the server stops whatever is streaming and
+  // replies with steer_ack and, when it applies, a branch event that becomes
+  // the new active run.
+  steer(checkpointId, direction, runId) {
+    const active = get().runs.find((item) => item.id === get().activeRunId);
+    const run = runId ? get().runs.find((item) => item.id === runId) : active;
     if (!run) return;
     if (run.status === "streaming") patchRun(run.id, { status: "stopped" });
     patchReading(run.id, checkpointId, (reading) =>
@@ -512,10 +531,34 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   selectRun(id) {
     const run = get().runs.find((item) => item.id === id);
     if (!run) return;
-    set({
-      activeRunId: id,
-      baselineRunId: run.parentRunId ?? get().baselineRunId,
-      hoveredTokenIndex: null,
-    });
+    set({ activeRunId: id, openReading: null });
   },
 }));
+
+/** The readings along the active run's path, oldest first. */
+export function readingChain(runs: readonly Run[], activeRunId: string | null): ChainEntry[] {
+  const path: Run[] = [];
+  for (let run = runs.find((item) => item.id === activeRunId); run; ) {
+    path.unshift(run);
+    const parentId = run.parentRunId;
+    run = parentId ? runs.find((item) => item.id === parentId) : undefined;
+  }
+  const chain: ChainEntry[] = [];
+  path.forEach((run, index) => {
+    const child = path[index + 1];
+    const cut = child?.steer?.checkpointId;
+    const readings = Object.values(run.readings).sort((a, b) => a.checkpointId - b.checkpointId);
+    for (const reading of readings) {
+      if (cut !== undefined && reading.checkpointId > cut) break;
+      chain.push({
+        runId: run.id,
+        reading,
+        forkedTo: cut === reading.checkpointId ? child.steer : undefined,
+        leftBehind: cut === reading.checkpointId
+          ? readings.filter((other) => other.checkpointId > cut).length
+          : undefined,
+      });
+    }
+  });
+  return chain;
+}
