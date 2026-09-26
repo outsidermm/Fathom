@@ -1,8 +1,9 @@
 .page {
+  --font-ui: var(--font-display);
   min-height: 100svh;
   padding: clamp(1rem, 4vw, 3rem);
   background: var(--sand, #e5ccae);
-  color: var(--ink, #265858);
+  color: var(--ink, #055958);
   font-family: var(--font-body, "Trebuchet MS"), sans-serif;
 }
 
@@ -18,7 +19,7 @@
 
 .eyebrow {
   margin: 0 0 .6rem;
-  color: var(--harbor, #326f9f);
+  color: var(--harbor, #0e6398);
   font-family: var(--font-ui, "Trebuchet MS"), sans-serif;
   font-weight: 600;
 }
@@ -41,14 +42,14 @@
   display: inline-block;
   padding: .35rem .2rem;
   border-radius: .25rem;
-  color: var(--harbor, #326f9f);
+  color: var(--harbor, #0e6398);
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
 .link:hover { color: var(--driftwood, #503120); }
-.link:focus-visible { outline: 3px solid var(--harbor, #326f9f); outline-offset: 3px; }
+.link:focus-visible { outline: 3px solid var(--harbor, #0e6398); outline-offset: 3px; }
 
 .section {
   padding: 2.5rem 0;

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Darumadrop_One, JetBrains_Mono, Sen } from "next/font/google";
 
 import { Anglerfish } from "@/components/sea/decor/anglerfish";
 import { Pebbles } from "@/components/sea/decor/pebbles";
@@ -16,15 +17,19 @@ import { Input } from "@/components/ui/input";
 
 import styles from "./styleguide.module.css";
 
+const displayFont = Darumadrop_One({ weight: "400", subsets: ["latin"], variable: "--font-display" });
+const bodyFont = Sen({ subsets: ["latin"], variable: "--font-body" });
+const monoFont = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
+
 const surfaceColors = [
   ["sky", "#c6effa"], ["sky-haze", "#e2efe9"], ["sand", "#e5ccae"],
   ["sand-light", "#f8eee1"], ["sand-beach", "#e8c08e"], ["paper", "#f6efec"],
   ["plank", "#cc8f4f"], ["plank-dark", "#a45e37"], ["wood", "#af6f40"],
-  ["driftwood", "#503120"], ["crate", "#c5a97c"], ["ink", "#265858"],
-  ["slate", "#384151"], ["harbor", "#326f9f"], ["water", "#aae2f0"],
+  ["driftwood", "#503120"], ["crate", "#c5a97c"], ["ink", "#055958"],
+  ["slate", "#384151"], ["harbor", "#0e6398"], ["water", "#aae2f0"],
   ["water-mid", "#9fd5e6"], ["water-deep", "#5896ab"], ["foam", "#ffffff"],
   ["gold", "#f0c37b"], ["gold-ink", "#56321d"], ["coral", "#e27459"],
-  ["coral-ink", "#d56a43"], ["starfish", "#e5a83d"], ["shell", "#e08b6a"],
+  ["coral-ink", "#e56236"], ["starfish", "#e5a83d"], ["shell", "#e08b6a"],
   ["sea-glass", "#72c3d5"], ["kelp", "#a2d586"],
 ] as const;
 
@@ -36,8 +41,8 @@ const deepColors = [
 ] as const;
 
 const fontSamples = [
-  ["Display · Chewy", styles.display], ["UI · Fredoka", styles.ui],
-  ["Body · Nunito", styles.body], ["Mono · JetBrains Mono", styles.mono],
+  ["Display · Darumadrop One", styles.display], ["UI · Darumadrop One", styles.ui],
+  ["Body · Sen", styles.body], ["Mono · JetBrains Mono", styles.mono],
 ] as const;
 
 const sizes = [14, 16, 20, 28, 40, 56] as const;
@@ -60,7 +65,7 @@ function Swatches({ colors }: { colors: readonly (readonly [string, string])[] }
 
 export default function StyleguidePage() {
   return (
-    <main className={styles.page}>
+    <main className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable} ${styles.page}`}>
       <header className={styles.header}>
         <p className={styles.eyebrow}>Oracle of the Deep · UI reference</p>
         <h1 className={styles.title}>Surface & Deep Style Guide</h1>
