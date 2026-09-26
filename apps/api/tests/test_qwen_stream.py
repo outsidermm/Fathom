@@ -629,6 +629,18 @@ class WebSocketBridgeTests(unittest.TestCase):
         self.assertEqual("".join(e["text"] for e in events if e["type"] == "token"), "Hello world")
         self.assertEqual(events[-1]["state"], "done")
 
+    def test_steer_is_acknowledged_without_ending_the_run(self) -> None:
+        with TestClient(app) as client:
+            with client.websocket_connect("/ws/stream") as websocket:
+                websocket.receive_json()  # idle
+                websocket.send_json({"type": "steer", "checkpoint_id": 2, "alternative_id": 1})
+                self.assertEqual(websocket.receive_json(), {
+                    "type": "steer_ack", "checkpoint_id": 2, "alternative_id": 1,
+                    "applied": False, "message": "Steering is not connected yet",
+                })
+                websocket.send_json({"type": "steer", "checkpoint_id": 2, "alternative_id": 5})
+                self.assertEqual(websocket.receive_json()["state"], "error")
+
 
 if __name__ == "__main__":
     unittest.main()
