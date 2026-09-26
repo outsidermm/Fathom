@@ -1,0 +1,198 @@
+.page {
+  min-height: 100svh;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: var(--sand, #e5ccae);
+  color: var(--ink, #265858);
+  font-family: var(--font-body, "Trebuchet MS"), sans-serif;
+}
+
+.header,
+.section {
+  max-width: 1200px;
+  margin-inline: auto;
+}
+
+.header {
+  padding: 1.5rem 0 2rem;
+}
+
+.eyebrow {
+  margin: 0 0 .6rem;
+  color: var(--harbor, #326f9f);
+  font-family: var(--font-ui, "Trebuchet MS"), sans-serif;
+  font-weight: 600;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display, "Trebuchet MS"), sans-serif;
+  font-size: clamp(2.5rem, 5vw, 3.5rem);
+  font-weight: 400;
+  text-wrap: balance;
+}
+
+.intro {
+  max-width: 60ch;
+  margin: .8rem 0 1rem;
+  line-height: 1.6;
+}
+
+.link {
+  display: inline-block;
+  padding: .35rem .2rem;
+  border-radius: .25rem;
+  color: var(--harbor, #326f9f);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link:hover { color: var(--driftwood, #503120); }
+.link:focus-visible { outline: 3px solid var(--harbor, #326f9f); outline-offset: 3px; }
+
+.section {
+  padding: 2.5rem 0;
+  border-top: 2px solid rgb(80 49 32 / .2);
+}
+
+.sectionTitle {
+  margin: 0 0 1.25rem;
+  font-family: var(--font-display, "Trebuchet MS"), sans-serif;
+  font-size: 2.5rem;
+  font-weight: 400;
+  text-wrap: balance;
+}
+
+.sectionCopy {
+  margin: 0 0 1.5rem;
+  line-height: 1.5;
+}
+
+.subheading {
+  margin: 0 0 .85rem;
+  font-family: var(--font-ui, "Trebuchet MS"), sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: .85rem;
+}
+
+.swatch {
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--sand-light, #f8eee1);
+  box-shadow: 0 4px 0 rgb(80 49 32 / .1);
+}
+
+.swatchColor {
+  height: 88px;
+  box-shadow: inset 0 -1px 0 rgb(80 49 32 / .12);
+}
+
+.swatchMeta {
+  padding: .6rem .7rem .7rem;
+}
+
+.swatchName {
+  display: block;
+  color: var(--driftwood, #503120);
+  font-family: var(--font-ui, "Trebuchet MS"), sans-serif;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.swatchHex {
+  color: var(--slate, #384151);
+  font-family: var(--font-mono, monospace);
+  font-size: .8rem;
+}
+
+.typeGroup {
+  margin: 0 0 1.5rem;
+  padding: 1rem;
+  border-radius: 12px;
+  background: var(--sand-light, #f8eee1);
+}
+
+.typeSample {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin: .45rem 0;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.typeSize {
+  flex: 0 0 3rem;
+  color: var(--slate, #384151);
+  font-family: var(--font-mono, monospace);
+  font-size: .8rem;
+}
+
+.display { font-family: var(--font-display, "Trebuchet MS"), sans-serif; }
+.ui { font-family: var(--font-ui, "Trebuchet MS"), sans-serif; font-weight: 600; }
+.body { font-family: var(--font-body, "Trebuchet MS"), sans-serif; }
+.mono { font-family: var(--font-mono, monospace); }
+
+.primitiveGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.sampleBox {
+  min-height: 190px;
+  padding: 1.25rem;
+  border-radius: 14px;
+  background: var(--sand-light, #f8eee1);
+}
+
+.sampleBox p { line-height: 1.5; }
+
+.sampleBoxDark {
+  background: var(--wood, #af6f40);
+}
+
+.seaSample { min-height: 190px; padding: 1.25rem; border-radius: 12px; }
+
+.plankStack { display: grid; gap: .75rem; }
+
+.decorRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  min-height: 125px;
+}
+
+.viewportFull { height: 100svh; min-height: 400px; }
+.viewportHalf { height: 50svh; min-height: 260px; }
+
+.viewportContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  padding: 4rem 1.5rem 1.5rem;
+  text-align: center;
+}
+
+.viewportContent p { max-width: 45ch; line-height: 1.5; }
+
+.viewportGrid { display: grid; gap: 1.5rem; }
+
+.uiGroup { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.inputLabel { display: block; margin: 1rem 0 .4rem; font-weight: 700; }
+.inputWidth { max-width: 320px; }
+
+@media (max-width: 640px) {
+  .typeSample { gap: .5rem; }
+  .typeSize { flex-basis: 2.5rem; }
+}

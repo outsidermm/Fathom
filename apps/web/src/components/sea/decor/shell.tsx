@@ -1,17 +1,11 @@
-import type { SVGProps } from "react";
+import styles from "./decor.module.css";
 
-export function Shell(props: SVGProps<SVGSVGElement>) {
+export function Shell({ size = 84, className = "" }: { size?: number; className?: string }) {
   return (
-    <svg viewBox="0 0 80 80" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M13 56c-6-7-6-16 1-22 0-11 9-17 18-15 6-8 18-8 24 0 10-1 18 6 17 16 6 7 4 16-2 22L42 70 13 56Z"
-        fill="var(--shell)"
-        stroke="var(--driftwood)"
-        strokeWidth="3"
-        strokeLinejoin="round"
-      />
-      <path d="M42 69 18 31M42 69 31 21M42 69V17M42 69 55 21M42 69 68 31" stroke="var(--coral)" strokeWidth="2" />
-      <path d="M29 63c7 5 19 5 26 0" stroke="var(--driftwood)" strokeWidth="3" strokeLinecap="round" />
+    <svg aria-hidden="true" className={`${styles.float} ${styles.delayed} ${className}`} width={size} height={size} viewBox="0 0 100 100">
+      <path d="M12 71 C7 55 19 29 35 21 Q50 15 65 21 C81 29 93 55 88 71 Q73 77 50 75 Q27 77 12 71Z" fill="var(--shell, #e08b6a)" stroke="var(--plank-dark, #a45e37)" strokeWidth="3" />
+      <path d="M50 73 L50 20 M50 72 Q36 45 35 23 M49 72 Q22 52 23 31 M51 72 Q64 45 65 23 M52 72 Q78 52 77 31" fill="none" stroke="var(--paper, #f6efec)" strokeWidth="2.5" strokeLinecap="round" opacity=".8" />
+      <path d="M33 74 Q50 81 67 74 L63 85 Q50 90 37 85Z" fill="var(--coral, #e27459)" stroke="var(--plank-dark, #a45e37)" strokeWidth="3" />
     </svg>
   );
 }

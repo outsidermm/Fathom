@@ -1,31 +1,21 @@
-import type { CSSProperties, HTMLAttributes } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import styles from "./sea.module.css";
 
-import { cn } from "@/lib/utils";
-
-export function PaperNote({
-  className,
-  children,
-  rotate = 0,
-  pin = true,
-  style,
-  ...props
-}: HTMLAttributes<HTMLDivElement> & {
+type PaperNoteProps = {
+  children: ReactNode;
+  title?: string;
   rotate?: number;
   pin?: boolean;
-}) {
-  const angle = Math.max(-1.5, Math.min(1.5, rotate));
+  className?: string;
+};
+
+export function PaperNote({ children, title, rotate = -1, pin = true, className = "" }: PaperNoteProps) {
+  const style = { "--note-rotate": `${Math.max(-1.5, Math.min(1.5, rotate))}deg` } as CSSProperties;
   return (
-    <div
-      className={cn(
-        "paper-note relative rounded-[4px] bg-paper p-5 text-driftwood shadow-[0_10px_24px_rgb(80_49_32_/_0.18)]",
-        pin &&
-          "before:absolute before:left-1/2 before:top-2 before:size-2 before:-translate-x-1/2 before:rounded-full before:bg-coral before:shadow-[0_1px_2px_rgb(80_49_32_/_0.35)]",
-        className
-      )}
-      style={{ "--paper-rotate": `${angle}deg`, ...style } as CSSProperties}
-      {...props}
-    >
+    <section className={`${styles.paperNote} ${className}`} style={style}>
+      {pin ? <span className={styles.paperNotePin} aria-hidden="true" /> : null}
+      {title ? <h3 className={styles.paperTitle}>{title}</h3> : null}
       {children}
-    </div>
+    </section>
   );
 }
