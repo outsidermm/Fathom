@@ -27,7 +27,7 @@ apps/web/    Next.js + TypeScript + shadcn/ui frontend
 apps/api/    FastAPI backend — live Qwen text bridge; activation stream pending
 docs/        API contract, Runpod runbook, deployment guide, orchestration design
 docker-compose.yml   Postgres (local dev)
-apps/api/vercel.json  Vercel FastAPI preset, Fluid Compute, 300s duration
+vercel.json  Vercel Services — web + API on one domain, API duration 300s
 render.yaml  Previous Render Blueprint (retained alongside apps/api/Dockerfile)
 ```
 
@@ -75,24 +75,25 @@ docker compose up -d
 
 ## Deployed
 
-Follow [`docs/deployment.md`](docs/deployment.md) to create two Vercel
-projects from this repo, with Root Directories `apps/web` and `apps/api`:
+Follow [`docs/deployment.md`](docs/deployment.md) to create one Vercel project
+from the repository root using **Services (Beta)**:
 
-- Frontend: Vercel (fill in once deployed)
-- API: Vercel Python Functions / FastAPI (fill in once deployed)
+- Frontend: `https://<project>.vercel.app/` (fill in once deployed)
+- API: `/api/health`, `/api/features`, and `/ws/stream` on the same domain
 
 Set `QWEN_API_BASE`, `QWEN_API_KEY`, `QWEN_MODEL`, and `CORS_ORIGINS` in the
-API project's environment settings. James must supply a Qwen HTTPS URL
-reachable from Vercel. Set `NEXT_PUBLIC_API_BASE=https://<api-project>.vercel.app`
-and `NEXT_PUBLIC_WS_URL=wss://<api-project>.vercel.app/ws/stream` in the web
-project, then rebuild it. `CORS_ORIGINS` controls HTTP CORS only; the current
-WebSocket accepts any origin and has no authentication.
+project's environment settings. James must supply a Qwen HTTPS URL
+reachable from Vercel. Explicitly set `NEXT_PUBLIC_API_BASE` to an empty string
+and `NEXT_PUBLIC_WS_URL=/ws/stream`, then rebuild. Unset values still fall
+back to localhost for local development. `CORS_ORIGINS` controls HTTP CORS
+only; the current WebSocket accepts any origin and has no authentication.
 
-The API config enables Fluid Compute with a 300-second connection limit.
-Long generations or idle tabs can hit that limit; the current frontend
+Services uses Fluid Compute by default; the API has a 300-second connection
+limit. Long generations or idle tabs can hit that limit; the current frontend
 requires a page reload to reconnect. See the deployment guide for plan
 limits and validation steps. Hosted Postgres is deferred; nothing reads
-`DATABASE_URL` yet. Deployment requires a Vercel account with repo access.
+`DATABASE_URL` yet. Deployment requires a Vercel account with repo access
+and Services Beta availability; the guide documents the two-project fallback.
 
 ## Status
 

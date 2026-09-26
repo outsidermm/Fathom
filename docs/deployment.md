@@ -1,116 +1,144 @@
-# Deployment — frontend and API on Vercel
+# Deployment — one Vercel Services project
 
-The deployment target is two Vercel projects from `outsidermm/HackGT-13`:
-`apps/web` for Next.js and `apps/api` for FastAPI. Qwen inference stays on
-James's Runpod GPU Pod. These are setup instructions for the account owner;
-this branch does not create or deploy a Vercel project. Review
-`kareem/vercel-deploy` before any production promotion or merge.
+The deployment target is **one Vercel project and domain** from
+`outsidermm/HackGT-13`, with `apps/web` (Next.js) and `apps/api` (FastAPI)
+as separate services. Qwen inference stays on James's Runpod GPU Pod.
+These are setup instructions for the account owner; this branch does not
+create or deploy a Vercel project. Review `kareem/vercel-deploy` before any
+production promotion or merge.
 
 ## What Vercel currently documents
 
 Official documentation checked on **2026-09-25**:
 
-- [FastAPI deployment](https://vercel.com/docs/frameworks/backend/fastapi)
-  requires a `FastAPI` instance named `app` and lists these entrypoints:
-  > `app.py`, `index.py`, `server.py`, `main.py`, `wsgi.py`, or `asgi.py`
-  >
-  > the same filenames inside `src/` or `app/`
+- [Services overview](https://vercel.com/docs/services): Services is in beta
+  on all plans. Services build independently, share a deployment/domain and
+  project environment variables, and need top-level rewrites for public access.
+  Build/runtime fields such as `framework` and `functions` belong inside each
+  service, not at the top level.
+- [Configuration reference](https://vercel.com/docs/services/config-reference):
+  `root` is relative to the root `vercel.json`; `entrypoint` accepts a Python
+  ASGI module and variable. Here `app.main:app` resolves to
+  `apps/api/app/main.py`'s `app` from the `apps/api/` service root.
+  `main:app` would incorrectly look for `apps/api/main.py`.
+- [Routing](https://vercel.com/docs/services/routing): ordered rewrites choose
+  the first matching service and preserve the original request path. We route
+  `/api/(.*)` and `/ws/(.*)` to `api`, then `/(.*)` to `web`. No prefix stripping,
+  destination `path` override, or Next.js proxy is required.
+- [Services compute guide](https://vercel.com/kb/guide/vercel-services-fluid-compute):
+  Services backends use Fluid Compute by default. Configure duration under
+  `services.api.functions`, with paths relative to the service root.
+  Our key is `app/main.py`, with `maxDuration: 300`. There is no documented
+  service-level `fluid` property; the current official JSON schema also rejects
+  it. The previous `fluid: true` is replaced by Services' default, not moved
+  into an unsupported field.
 
-  Our existing `app/main.py` matches when the project root is `apps/api`.
-  A custom module can instead use `[tool.vercel] entrypoint = "module:app"`
-  in `pyproject.toml`; we do not need that override.
-- [Python runtime](https://vercel.com/docs/functions/runtimes/python) detects
-  FastAPI from `requirements.txt` and routes requests to the app. Dependencies
-  remain in that file. `.python-version` pins Python 3.12, matching the existing
-  Docker image and a currently supported Vercel version.
-- [Python WebSocket announcement](https://vercel.com/changelog/websocket-support-is-now-available-for-python-functions)
-  (July 23, 2026) demonstrates a regular FastAPI `@app.websocket(...)` endpoint.
-  [WebSocket docs](https://vercel.com/docs/functions/websockets) confirm ASGI
-  support without a Vercel-specific upgrade API. WebSockets are in beta on
-  all plans and run on Fluid Compute, as described in the
-  [WebSocket beta announcement](https://vercel.com/changelog/websocket-support-is-now-in-public-beta).
-- [Duration configuration](https://vercel.com/docs/functions/configuring-functions/duration)
-  says a Python framework app builds into one Function and the `functions`
-  key must be its resolved entrypoint file, here `app/main.py`.
+The root [`vercel.json`](../vercel.json) is the single deployment config.
+The previous `apps/api/vercel.json` has been removed. Application files stay
+in place, with Python 3.12 still selected by `apps/api/.python-version` and
+API dependencies still in `apps/api/requirements.txt`.
 
-The relevant structure is:
+| Public route | Service | Path received by the app |
+|---|---|---|
+| `GET /api/health` | `api` | `/api/health` |
+| `GET /api/features` | `api` | `/api/features` |
+| `WS /ws/stream` | `api` | `/ws/stream` |
+| `/`, frontend routes, `/_next/...` | `web` | Original path |
 
-```text
-apps/api/                 # Vercel API project's Root Directory
-├── .python-version       # 3.12
-├── requirements.txt      # includes fastapi, uvicorn, httpx
-├── vercel.json
-└── app/
-    ├── __init__.py
-    ├── main.py           # app = FastAPI(); HTTP routes + /ws/stream
-    ├── qwen_stream.py
-    ├── mock_stream.py
-    └── schemas.py
-```
+Routing into a service is final: an unknown `/api/...` returns the API's 404,
+not the frontend. FastAPI's default `/docs` and `/openapi.json` are not exposed
+by these API rewrites; those public paths enter the web service.
+`apps/web/next.config.ts` has no rewrite/proxy config and needs no changes.
+The browser calls the API directly through the deployment's shared routes;
+no internal service binding is needed for this client flow.
 
-[`apps/api/vercel.json`](../apps/api/vercel.json) selects the FastAPI preset,
-explicitly enables Fluid Compute, and sets `functions["app/main.py"].maxDuration`
-to **300 seconds**. This works within both Hobby and Pro Fluid limits.
-The documented [fluid property](https://vercel.com/docs/project-configuration/vercel-json#fluid)
-enables it per deployment. Framework routing preserves `/api/health`,
-`/api/features`, and `/ws/stream`; no entrypoint relocation or rewrite is needed.
+## 1. Set up the single Services project (account owner)
 
-## 1. Set up the API project (account owner)
+1. Confirm **Services (Beta) is available/enabled for the owning account/team**.
+   The overview currently lists all plans, but does not prescribe an account
+   toggle or enrollment sequence. This branch cannot confirm the team's access.
+   If the account cannot use `services`, consult Vercel's dashboard/support or
+   use the two-project fallback below; do not improvise beta config fields.
+2. Import the GitHub repo **once**, with **Root Directory at the repository
+   root** (not `apps/web` or `apps/api`). Let the root config define both
+   services and their framework presets. Remove project-wide install/build
+   overrides inherited from a standalone Next.js or FastAPI setup; use the
+   service presets' defaults.
+3. Set these project Environment Variables for the intended environment
+   (Preview for branch validation; Production only when approved):
 
-1. Import the GitHub repo in Vercel with **Root Directory `apps/api`** and
-   **Framework Preset FastAPI**. Use the review branch for Preview validation;
-   keep production promotion separate. Leave install/build settings at the
-   preset defaults so Vercel installs `requirements.txt`.
-2. Set these variables in the API project's Environment Variables settings
-   for the intended environment (Preview for branch validation; Production
-   only when approved):
-
-   | Variable | Hosted value |
+   | Variable | Hosted Services value |
    |---|---|
-   | `QWEN_API_BASE` | James's externally reachable HTTPS OpenAI-compatible base URL, including `/v1` |
-   | `QWEN_API_KEY` | Bearer secret for that endpoint, if required; API project only |
-   | `QWEN_MODEL` | `qwen2.5-7b` (the code's default) |
-   | `CORS_ORIGINS` | Exact frontend HTTP origins, comma-separated with no spaces or trailing slash, e.g. `https://<frontend-project>.vercel.app` |
+   | `QWEN_API_BASE` | James's reachable HTTPS OpenAI-compatible base URL, including `/v1` |
+   | `QWEN_API_KEY` | Bearer secret for that endpoint, if required |
+   | `QWEN_MODEL` | `qwen2.5-7b` (code default) |
+   | `CORS_ORIGINS` | Exact allowed HTTP origins when cross-origin access is needed, comma-separated without spaces or trailing slash |
+   | `NEXT_PUBLIC_API_BASE` | **Empty string**, explicitly set |
+   | `NEXT_PUBLIC_WS_URL` | `/ws/stream` |
 
-   Redeploy after changing variables. Vercel cannot reach the local default
-   `http://127.0.0.1:30001/v1` or anyone's laptop SSH tunnel.
-3. Validate the branch's Preview deployment. Confirm Fluid Compute is active
-   and the Function duration is 300 seconds.
-4. Check `curl -fsS https://<api-deployment>.vercel.app/api/health` returns
-   `{"status":"ok"}`. `/api/features` also works without Qwen and remains
-   placeholder data. Neither proves inference connectivity.
+   For the Vercel UI, enter an actual empty value for `NEXT_PUBLIC_API_BASE`,
+   not literal quote characters. In a dotenv file the equivalent is:
 
-**HTTP CORS and WebSocket origins:** `CORS_ORIGINS` configures only HTTP
-`CORSMiddleware`. `/ws/stream` currently accepts **any origin**, including
-requests without an `Origin` header, and has **no application authentication**.
-It does not read or enforce `CORS_ORIGINS`. Setting that variable is not an
-access restriction on Qwen generation. The endpoint's behavior is unchanged
-in this migration; decide on authentication/origin enforcement before wider
-public exposure.
+   ```dotenv
+   NEXT_PUBLIC_API_BASE=""
+   NEXT_PUBLIC_WS_URL=/ws/stream
+   ```
 
-## 2. Set up the frontend project (account owner)
+   The project environment is shared across services; do not assume an API-only
+   secret scope. `QWEN_API_KEY` stays a server secret: never rename it with
+   `NEXT_PUBLIC_` or read it from browser code. Redeploy after environment changes;
+   `NEXT_PUBLIC_*` values are compiled into the web build.
+4. Validate the branch's Preview deployment manually. Confirm the API runs on
+   Fluid Compute with a 300-second duration and the browser can access the HTTP
+   routes and WebSocket upgrade under the project-wide deployment protection.
+5. Check `curl -fsS https://<deployment>.vercel.app/api/health` returns
+   `{"status":"ok"}`. `/api/features` remains placeholder data. Neither check
+   proves Qwen connectivity. Submit a browser prompt and confirm real `token`
+   events followed by `status: done`; exercise Stop and a fresh run.
 
-1. Import the same repo as a second Vercel project with **Root Directory
-   `apps/web`** and the **Next.js** preset.
-2. Set these in the web project's target environment:
+### Same-origin URLs and CORS
+
+`contract.ts` uses `??` localhost fallbacks. **Unset variables still point at
+localhost**, even on Vercel, so explicitly set both hosted values above.
+`API_BASE` is an origin prefix; empty means same-origin paths such as
+`/api/health`. Setting it to `/api` would duplicate the prefix when constructing
+an API route. There is no need for a fixed public origin in this setup.
+
+The existing hook passes `WS_URL` to the browser's `new WebSocket(...)`.
+The [WebSocket constructor](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket)
+accepts relative URLs and resolves HTTPS to WSS. `/ws/stream` therefore follows
+this deployment's domain on both Preview and Production. An explicit
+`wss://<deployment>.vercel.app/ws/stream` is also valid, but locks that build to
+one domain. These relative values are for the hosted/shared-origin setup;
+keep the localhost values for separate `npm run dev` and Uvicorn servers.
+
+Same-origin browser HTTP requests do not require cross-origin CORS permissions.
+`CORS_ORIGINS` still configures **HTTP CORSMiddleware only**. `/ws/stream`
+currently accepts **any origin**, including requests without an `Origin`
+header, and has **no application authentication**. This migration preserves
+that behavior; CORS is not an access restriction on Qwen generation.
+
+## 2. Fallback if Services Beta is unavailable
+
+The previous standalone setup is preserved in commit **`bec9ad4`**. Use that
+revision on a separate fallback branch/checkout rather than deploying this
+Services config as if it were standalone:
+
+1. Import two Vercel projects with roots `apps/api` (FastAPI) and `apps/web`
+   (Next.js). The older `apps/api/vercel.json` enables Fluid Compute and sets
+   the API's `app/main.py` duration to 300 seconds.
+2. Set `QWEN_API_BASE`, `QWEN_API_KEY`, `QWEN_MODEL`, and `CORS_ORIGINS` in the
+   API project. For HTTP CORS, allow the frontend's exact origin.
+3. Set these in the web project and rebuild:
 
    ```dotenv
    NEXT_PUBLIC_API_BASE=https://<api-deployment>.vercel.app
    NEXT_PUBLIC_WS_URL=wss://<api-deployment>.vercel.app/ws/stream
    ```
 
-   Use the API deployment corresponding to that environment. HTTPS pages
-   need `wss://` for the socket. These public variables are compiled into the
-   frontend; rebuild/redeploy after changing them. Keep `QWEN_API_KEY` in the
-   API project.
-3. Add the frontend's exact URL to the API's `CORS_ORIGINS`, then redeploy
-   the API for HTTP fetches. Include exact Preview origins if testing them.
-4. Ensure the browser can reach the API's health and WebSocket upgrade routes
-   under the project's deployment protection settings. A login page in place
-   of an API response or upgrade prevents this separate frontend from working.
-5. In the browser, submit a prompt and confirm actual `token` events followed
-   by `status: done`, per [api-contract.md](api-contract.md). Exercise Stop and
-   a fresh run, and inspect Function logs for upstream failures/timeouts.
+4. Validate API health, deployment protection, and actual Qwen streaming.
+   Relative URLs are unsuitable for this fallback because the frontend and
+   API have different origins. Keep production promotion separate from review.
 
 ## 3. Runpod handoff — James
 
@@ -159,7 +187,8 @@ list these Python Fluid Compute limits:
 Above 800s requires per-function configuration and a supported runtime
 (Python 3.12/3.13/3.14); Secure Compute and Static IPs do not support it during
 beta. Our explicit 300s setting applies on Pro too. To extend it on Pro,
-change `app/main.py`'s `maxDuration` in `vercel.json`; a dashboard default does
+change `services.api.functions["app/main.py"].maxDuration` in the root
+`vercel.json`; a dashboard default does
 not override that file.
 
 For comparison, Vercel's earlier official
@@ -211,8 +240,8 @@ service and optional example variable remain for future persistence work.
 
 [`render.yaml`](../render.yaml) and
 [`apps/api/Dockerfile`](../apps/api/Dockerfile) remain unchanged as the previous
-Render deployment path. Vercel uses the FastAPI preset and Python dependencies;
-it does not use that Blueprint or Docker image in this setup.
+Render deployment path. The API service uses the FastAPI preset and Python
+dependencies; it does not use that Blueprint or Docker image in this setup.
 
 ## Local development and tests
 
@@ -231,10 +260,15 @@ The API reads process environment variables; it does not automatically load
 that file. Export any overrides before starting Uvicorn. For the frontend,
 copy `apps/web/.env.example` to `apps/web/.env.local` as in the README.
 
+For a unified local route surface, the Services docs also describe
+`vercel dev -L` from the repository root (no cloud authentication). Use the
+relative hosted web variables for that mode. The separate-server Phase 0
+workflow above remains unchanged.
+
 Run the existing API suite from `apps/api`:
 
 ```bash
-python -m unittest discover -s tests -p test_qwen_stream.py -v
+python -m unittest discover -s tests -v
 ```
 
 It checks SSE parsing, upstream error reporting, and the browser WebSocket
