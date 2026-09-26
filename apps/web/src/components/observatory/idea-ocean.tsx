@@ -133,7 +133,7 @@ export function IdeaOcean({ paused }: { paused: boolean }) {
           </div>
         )}
 
-        <form className={styles.guideForm} onSubmit={submitCustom}>
+        <form data-coach-target="directions" className={styles.guideForm} onSubmit={submitCustom}>
           <label htmlFor="idea-direction" className={styles.guideLabel}>Want a different direction?</label>
           <div className={styles.guideRow}>
             <input

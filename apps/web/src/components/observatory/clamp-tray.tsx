@@ -48,7 +48,7 @@ export function ClampTray() {
         <PanelEmptyState>
           {STEERING_ENABLED
             ? "No clamps selected."
-            : "No clamps. Steering is not connected yet."}
+            : "Feature controls aren't available yet. Try an idea bubble or write a direction in the ocean."}
         </PanelEmptyState>
       )}
     </section>
