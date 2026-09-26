@@ -9,6 +9,7 @@ import math
 import os
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -19,6 +20,28 @@ from .schemas import AVAlternativesEvent, AVErrorEvent, AVEvent, StatusEvent, To
 
 SendEvent = Callable[[dict], Awaitable[None]]
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class CheckpointState:
+    checkpoint: Checkpoint
+    reading: dict | None = None  # the "av" event, once it has arrived
+    alternatives: list[dict] | None = None
+
+
+@dataclass
+class RunState:
+    """What a run produced, kept so it can be steered from afterwards."""
+
+    run_id: str
+    prompt: str
+    # Parent text kept before a branch point; "" for a fresh run.
+    prefix: str = ""
+    # Sidecar steers the text was generated under (inherited ones first).
+    steers: list[dict] = field(default_factory=list)
+    parent_run_id: str | None = None
+    text: str = ""  # prefix plus everything streamed after it
+    checkpoints: dict[int, CheckpointState] = field(default_factory=dict)
 
 
 def _qwen_endpoint() -> tuple[str, str, dict[str, str]]:
@@ -335,6 +358,8 @@ async def run_qwen_stream(
     pace: bool = True,
     client: httpx.AsyncClient | None = None,
     av_client: httpx.AsyncClient | None = None,
+    state: RunState | None = None,
+    deltas: AsyncIterator[str] | None = None,
 ) -> None:
     """Bridge live Qwen text to the frontend, with AV readings before sections.
 
@@ -348,7 +373,15 @@ async def run_qwen_stream(
     Each reading also starts a request for alternative directions, sent after
     the reading itself; ones still running at status:done get AV_ALT_GRACE
     seconds more.
+
+    ``state`` records the text, readings and alternatives for later steering.
+    A branch passes its steered ``deltas`` and a ``state`` whose prefix is the
+    parent text it continues: checkpoints are then found only after the
+    prefix (the first is the new section itself), token positions continue
+    from it, and readings replay the branch's steers.
     """
+    state = state or RunState(run_id="", prompt=prompt)
+    prefix = state.prefix
     hold_timeout = _env_float("AV_HOLD_TIMEOUT", 4.0)
     semaphore = asyncio.Semaphore(max(1, int(_env_float("AV_CONCURRENCY", 3))))
     alt_count = alternatives_count()
@@ -356,7 +389,7 @@ async def run_qwen_stream(
     alt_semaphore = asyncio.Semaphore(max(1, int(_env_float("AV_ALT_CONCURRENCY", 2))))
     alt_grace = _env_float("AV_ALT_GRACE", 10.0)
     lookahead = LOOKAHEAD if pace else 0
-    streamed = ""  # Everything Qwen has produced so far.
+    streamed = prefix  # The kept prefix and everything Qwen has produced since.
     streamed_done = False
     changed = asyncio.Event()
     checkpoints: list[tuple[Checkpoint, asyncio.Task[dict]]] = []
@@ -371,43 +404,50 @@ async def run_qwen_stream(
             announced = True
             await send(StatusEvent(state="streaming").model_dump(exclude_none=True))
 
-    async def run_alternatives(checkpoint_id: int, prefix: str, reading: dict) -> None:
+    async def run_alternatives(checkpoint_id: int, answer: str, reading: dict) -> None:
         async with alt_semaphore:
-            event = await request_alternatives(prompt, prefix, reading, n=alt_count)
+            event = await request_alternatives(prompt, answer, reading, n=alt_count)
         if event is not None:
+            state.checkpoints[checkpoint_id].alternatives = event["alternatives"]
             await shown[checkpoint_id].wait()  # Never before the reading itself.
             await send(event)
 
-    async def run_av(checkpoint_id: int, checkpoint: Checkpoint, prefix: str) -> dict:
+    async def run_av(checkpoint_id: int, checkpoint: Checkpoint, answer: str) -> dict:
         async with semaphore:
             reading = await _request_av(
-                prompt, prefix, checkpoint_id=checkpoint_id,
-                checkpoint=checkpoint, client=av_client,
+                prompt, answer, checkpoint_id=checkpoint_id,
+                checkpoint=checkpoint, client=av_client, steers=state.steers,
             )
-        if alt_count and reading["type"] == "av":
-            task = asyncio.create_task(run_alternatives(checkpoint_id, prefix, reading))
-            alt_tasks.append((checkpoint_id, task))
+        if reading["type"] == "av":
+            state.checkpoints[checkpoint_id].reading = reading
+            if alt_count:
+                task = asyncio.create_task(run_alternatives(checkpoint_id, answer, reading))
+                alt_tasks.append((checkpoint_id, task))
         return reading
 
     def schedule(checkpoint: Checkpoint, answer: str) -> None:
+        state.checkpoints[len(checkpoints)] = CheckpointState(checkpoint)
         task = asyncio.create_task(
             run_av(len(checkpoints), checkpoint, answer[: checkpoint.sample_end])
         )
         checkpoints.append((checkpoint, task))
         shown.append(asyncio.Event())
 
+    plan = pace and not prefix and state.parent_run_id is None
+
     async def produce() -> None:
         nonlocal streamed, streamed_done
         taken: set[int] = set()
-        last_position = -1
+        last_position = len(prefix) - 1  # A branch's first section starts at its prefix end.
         try:
-            async for delta in qwen_deltas(prompt, client=client):
+            async for delta in deltas if deltas is not None else qwen_deltas(prompt, client=client):
                 if not delta:
                     continue
                 streamed += delta
+                state.text = streamed
                 answer = streamed
                 while len(checkpoints) < _MAX_CHECKPOINTS:
-                    sections = len(checkpoints) - (1 if pace else 0)  # Not the plan.
+                    sections = len(checkpoints) - (1 if plan else 0)  # Not the plan.
                     gap = 0 if sections < _DENSE_CHECKPOINTS else _SPREAD_GAP
                     checkpoint = next_checkpoint(answer, taken, last_position, gap)
                     if checkpoint is None:
@@ -460,13 +500,14 @@ async def run_qwen_stream(
             await send(StatusEvent(state="streaming").model_dump(exclude_none=True))
         await flush(released)
 
-    if pace:
+    if plan:
         schedule(PLAN, "")  # The prompt's end state, before any answer text.
+    state.text = prefix
     producer = asyncio.create_task(produce())
     waiter: asyncio.Task[bool] | None = None
     try:
         index = 0
-        released = 0
+        released = len(prefix)
         next_hold = 0
         while True:
             changed.clear()
@@ -539,6 +580,7 @@ async def _request_av(
     checkpoint_id: int,
     checkpoint: Checkpoint,
     client: httpx.AsyncClient | None = None,
+    steers: list[dict] | None = None,
 ) -> dict:
     """Return an ``av`` or ``av_error`` event for one answer checkpoint."""
     url = os.environ.get("AV_API_BASE", "http://127.0.0.1:30003").rstrip("/")
@@ -554,6 +596,8 @@ async def _request_av(
     key = os.environ.get("AV_API_KEY")
     headers = {"Authorization": f"Bearer {key}"} if key else None
     body: dict = {"prompt": prompt, "answer": answer}
+    if steers:  # A branch's reading replays the steers its text came from.
+        body["steers"] = steers
     if checkpoint == PLAN:
         body["prompt_end_back"] = _PLAN_PROMPT_END_BACK
     try:

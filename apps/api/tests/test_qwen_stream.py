@@ -136,7 +136,7 @@ class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(released, event["position"], event["label"])
 
     async def test_readings_are_shown_before_their_sections(self) -> None:
-        async def fake_av(_prompt, answer, *, checkpoint_id, checkpoint, client=None):
+        async def fake_av(_prompt, answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             await asyncio.sleep(0.02)
             return av_event(checkpoint_id, checkpoint)
 
@@ -152,7 +152,7 @@ class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_plan_reading_comes_before_any_text(self) -> None:
         answers: dict[str, str] = {}
 
-        async def fake_av(_prompt, answer, *, checkpoint_id, checkpoint, client=None):
+        async def fake_av(_prompt, answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             answers[checkpoint.label] = answer
             return av_event(checkpoint_id, checkpoint)
 
@@ -165,7 +165,7 @@ class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(answers["Step 2"], INTRO + STEP_1 + "2. **Research**:")
 
     async def test_hold_timeout_releases_text_and_late_reading_still_lands(self) -> None:
-        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             await asyncio.sleep(0.15 if checkpoint.label == "Step 1" else 0)
             return av_event(checkpoint_id, checkpoint)
 
@@ -183,7 +183,7 @@ class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_reading_that_misses_the_answer_is_dropped(self) -> None:
         release = asyncio.Event()
 
-        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             await release.wait()
             return av_event(checkpoint_id, checkpoint)
 
@@ -197,7 +197,7 @@ class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.events[-1], {"type": "status", "state": "done", "av_dropped": 3})
 
     async def test_unpaced_runs_have_no_plan_and_no_holds(self) -> None:
-        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             return av_event(checkpoint_id, checkpoint)
 
         with patch("app.qwen_stream.qwen_deltas", streaming(*chunks(ANSWER), delay=0.01)), \
@@ -211,7 +211,7 @@ class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
         running = 0
         peak = 0
 
-        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             nonlocal running, peak
             running += 1
             peak = max(peak, running)
@@ -233,7 +233,7 @@ class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
             for i in range(1, 12)
         )
 
-        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             return av_event(checkpoint_id, checkpoint)
 
         with patch("app.qwen_stream.qwen_deltas", streaming(*chunks(INTRO + steps))), \
@@ -249,7 +249,7 @@ class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_cancelled_run_does_not_emit_late_av(self) -> None:
         av_started = asyncio.Event()
 
-        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             av_started.set()
             await asyncio.sleep(60)
             return av_event(checkpoint_id, checkpoint)
@@ -373,7 +373,7 @@ class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(body["stream"])
 
     async def test_upstream_failure_sends_error_without_fake_text(self) -> None:
-        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+        async def fake_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             await asyncio.sleep(60)
             return av_event(checkpoint_id, checkpoint)
 
@@ -408,7 +408,7 @@ class AlternativesTests(unittest.IsolatedAsyncioTestCase):
         return [event["type"] for event in self.events]
 
     async def run_stream(self, fake_alternatives, fake_av=None, **options) -> None:
-        async def instant_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+        async def instant_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             return av_event(checkpoint_id, checkpoint)
 
         with patch("app.qwen_stream.qwen_deltas", streaming(*chunks(ANSWER))), \
@@ -438,7 +438,7 @@ class AlternativesTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_readings_get_no_alternatives(self) -> None:
         calls = 0
 
-        async def failing_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+        async def failing_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None, steers=None):
             return {"type": "av_error", "message": "AV unavailable", "checkpoint_id": checkpoint_id,
                     "position": checkpoint.position, "label": checkpoint.label}
 
@@ -609,7 +609,7 @@ class WebSocketBridgeTests(unittest.TestCase):
         patch_alternatives(self)
 
     def test_prompt_streams_qwen_text_to_websocket(self) -> None:
-        async def fake_av(_prompt: str, _answer: str, *, checkpoint_id, checkpoint, client=None) -> dict:
+        async def fake_av(_prompt: str, _answer: str, *, checkpoint_id, checkpoint, client=None, steers=None) -> dict:
             return av_event(checkpoint_id, checkpoint, "The answer is a greeting.")
 
         with patch("app.qwen_stream.qwen_deltas", streaming("Hello", " world")), \
