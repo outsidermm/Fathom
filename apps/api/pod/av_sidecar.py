@@ -7,7 +7,9 @@ This sidecar stays on loopback; the API reaches it through a private tunnel.
 from __future__ import annotations
 
 import os
+import re
 import threading
+import time
 from functools import lru_cache
 
 import httpx
@@ -23,20 +25,11 @@ AV_PATH = os.environ.get("AV_PATH", "/workspace/models/nla-av")
 AV_URL = os.environ.get("AV_URL", "http://127.0.0.1:30002")
 REPLAY_DEVICE = os.environ.get("QWEN_REPLAY_DEVICE", "cuda:0")
 LAYER = 20
+AV_MAX_TOKENS = int(os.environ.get("AV_MAX_TOKENS", "96"))
 
-app = FastAPI(title="Qwen activation verbalizer")
-_inference_lock = threading.Lock()
-
-
-class ExplainRequest(BaseModel):
-    prompt: str = Field(min_length=1, max_length=16000)
-    answer: str = Field(min_length=1, max_length=16000)
-
-
-class ExplainResponse(BaseModel):
-    explanation: str
-    layer: int = LAYER
-    sample: str = "replayed_last_content_token"
+# Guards only the replay forward pass. AV generation runs outside it so that
+# concurrent requests can batch in the AV SGLang server.
+_replay_lock = threading.Lock()
 
 
 @lru_cache(maxsize=1)
@@ -53,44 +46,79 @@ def _models():
     return tokenizer, model, av
 
 
+app = FastAPI(title="Qwen activation verbalizer")
+
+
+class ExplainRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=16000)
+    answer: str = Field(min_length=1, max_length=16000)
+
+
+class ExplainResponse(BaseModel):
+    explanation: str
+    layer: int = LAYER
+    sample: str = "replayed_last_content_token"
+    replay_ms: int
+    av_ms: int
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
+_OPEN_TAG = "<explanation>"
+_SENTENCE_END = re.compile(r"[.!?](?=\s|$)")
+
+
+def _clean(text: str) -> str:
+    """Drop the tag NLAClient leaves on a truncated decode, ending at a full sentence."""
+    text = text.strip()
+    if not text.startswith(_OPEN_TAG):
+        return text
+    text = text[len(_OPEN_TAG):].strip()
+    ends = [m.end() for m in _SENTENCE_END.finditer(text)]
+    return text[: ends[-1]] if ends else text
+
+
 @app.post("/explain", response_model=ExplainResponse)
 def explain(request: ExplainRequest):
-    with _inference_lock:
-        try:
-            tokenizer, model, av = _models()
-            prompt_ids = tokenizer.apply_chat_template(
-                [{"role": "user", "content": request.prompt}],
-                tokenize=True,
-                add_generation_prompt=True,
-            )
-            answer_ids = tokenizer.encode(request.answer, add_special_tokens=False)
-            if not answer_ids:
-                raise ValueError("Answer contains no tokens")
-            sample_answer_index = next(
-                (
-                    i for i in range(len(answer_ids) - 1, -1, -1)
-                    if any(char.isalnum() for char in tokenizer.decode([answer_ids[i]]))
-                ),
-                len(answer_ids) - 1,
-            )
-            input_ids = torch.tensor(
-                [prompt_ids + answer_ids[: sample_answer_index + 1]],
-                dtype=torch.long,
-                device=REPLAY_DEVICE,
-            )
-            with torch.inference_mode():
-                # HF hidden_states[21] is the residual after block 20.
-                state = model(
-                    input_ids=input_ids, output_hidden_states=True, use_cache=False
-                ).hidden_states[LAYER + 1][0, -1].float().cpu()
-            text = av.generate(state, temperature=0, max_new_tokens=200)
-            if not text.strip():
-                raise ValueError("AV returned an empty explanation")
-            return ExplainResponse(explanation=text.strip())
-        except (ValueError, RuntimeError, httpx.HTTPError) as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
+    try:
+        tokenizer, model, av = _models()
+        started = time.perf_counter()
+        prompt_ids = tokenizer.apply_chat_template(
+            [{"role": "user", "content": request.prompt}],
+            tokenize=True,
+            add_generation_prompt=True,
+        )
+        answer_ids = tokenizer.encode(request.answer, add_special_tokens=False)
+        if not answer_ids:
+            raise ValueError("Answer contains no tokens")
+        sample_answer_index = next(
+            (
+                i for i in range(len(answer_ids) - 1, -1, -1)
+                if any(char.isalnum() for char in tokenizer.decode([answer_ids[i]]))
+            ),
+            len(answer_ids) - 1,
+        )
+        input_ids = torch.tensor(
+            [prompt_ids + answer_ids[: sample_answer_index + 1]],
+            dtype=torch.long,
+            device=REPLAY_DEVICE,
+        )
+        with _replay_lock, torch.inference_mode():
+            # HF hidden_states[21] is the residual after block 20.
+            state = model(
+                input_ids=input_ids, output_hidden_states=True, use_cache=False
+            ).hidden_states[LAYER + 1][0, -1].float().cpu()
+        replayed = time.perf_counter()
+        text = _clean(av.generate(state, temperature=0, max_new_tokens=AV_MAX_TOKENS))
+        if not text:
+            raise ValueError("AV returned an empty explanation")
+        return ExplainResponse(
+            explanation=text,
+            replay_ms=round((replayed - started) * 1000),
+            av_ms=round((time.perf_counter() - replayed) * 1000),
+        )
+    except (ValueError, RuntimeError, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
