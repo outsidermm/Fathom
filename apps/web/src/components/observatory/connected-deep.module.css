@@ -1,6 +1,6 @@
-.host { position: relative; min-height: 350px; height: 100%; }
+.host { position: relative; min-height: 720px; height: clamp(720px, 82svh, 1000px); }
 .live { height: 100%; }
-.paused .live canvas { visibility: hidden; }
+.paused .live canvas[data-feature-map] { visibility: hidden; }
 .frozen { position: absolute; pointer-events: none; }
 .notice {
   position: absolute;
@@ -11,4 +11,7 @@
   background: var(--abyss);
   color: var(--deep-ink);
   font-size: .875rem;
+}
+@media (max-width: 640px) {
+  .host { min-height: 560px; height: clamp(560px, 75svh, 800px); }
 }

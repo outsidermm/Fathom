@@ -1,0 +1,13 @@
+.scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.scene canvas { display: block; width: 100%; height: 100%; opacity: .7; }
+.fallback { position: absolute; inset: 0; }
+.scene[data-renderer="webgl"] .fallback { visibility: hidden; }
+.decoration { position: absolute; filter: saturate(.55); }
+.settled { animation: none; }
