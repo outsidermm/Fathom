@@ -2,8 +2,12 @@
 
 This is the **planned integration**, not a description of the current
 implementation. Today `apps/api/app/main.py` streams mock tokens and mock
-features. The [target API contract](api-contract.md) describes the live
-conversation protocol; the current frontend still speaks the mock WebSocket.
+features. The [target harness contract](target-harness-contract.md) describes
+that live conversation protocol as a possible **post-hackathon** direction —
+it is not what's being built this weekend. For this weekend's build, see
+[api-contract.md](api-contract.md) (the activation-stream contract the
+frontend is actually implementing against) and
+[frontend-roadmap.md](frontend-roadmap.md).
 The [Runpod runbook](runpod-inference.md) covers the model files and the
 separately verified AV service.
 

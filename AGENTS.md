@@ -54,11 +54,15 @@ they're written to be pasted into a prompt: https://vercel.com/design/guidelines
 
 ## House rules
 
-1. **Use `docs/api-contract.md` for the live harness.** The existing
-   `useActivationStream()` hook and `apps/api` WebSocket are a legacy mock
-   for local UI development. They do not implement the conversation,
-   inspection, attachment, tool, or steering routes. Migrate the frontend
-   hook and backend schemas together when implementing the target contract.
+1. **Build against `docs/api-contract.md` — that's the real contract for
+   this weekend.** `apps/api`'s WebSocket mock (`run_mock_stream`) already
+   implements it and is what the frontend should point at now; nothing here
+   is throwaway. There's a separate, unrelated "conversation harness"
+   design in `docs/target-harness-contract.md` (durable conversations,
+   branches, attachments, tool calls) — that's a possible **post-hackathon**
+   direction the team already passed on for HackGT 13. Don't build toward
+   it and don't treat `docs/api-contract.md` as if it describes those
+   routes.
 2. **Prefer prompting for real Next.js/shadcn code over "design tool then
    translate."** If you're generating a new screen from scratch, prompt
    v0.dev directly (it outputs Next.js + Tailwind + shadcn code you can
