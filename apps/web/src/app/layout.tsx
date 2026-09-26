@@ -22,6 +22,7 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Fathom",
   description: "See what surfaces. Shape what happens next.",
+  icons: { icon: "/brand/fathom-mark.svg" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
