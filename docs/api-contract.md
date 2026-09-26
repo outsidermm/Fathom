@@ -26,8 +26,10 @@ clamps.
 ### Client → server
 
 ```jsonc
-// Start a generation run; qwen2.5-7b is the only connected model
-{ "type": "start", "prompt": "string", "model": "qwen2.5-7b" }
+// Start a generation run; qwen2.5-7b is the only connected model.
+// pace (default true) holds the text at each checkpoint until its AV
+// reading arrives or AV_HOLD_TIMEOUT (4 s) passes.
+{ "type": "start", "prompt": "string", "model": "qwen2.5-7b", "pace": true }
 
 // Reserved steering messages: currently return status:error and do not
 // change generation. Do not show these controls as available yet.
@@ -75,6 +77,13 @@ clamps.
 // Connection / run lifecycle. `message` is only ever present on "error" —
 // omit the field entirely rather than sending it null.
 { "type": "status", "state": "idle" | "streaming" | "done" | "error", "message": "optional" }
+
+// Paced runs only: text is held at a checkpoint while its AV reading runs.
+// status:streaming follows when the hold ends.
+{ "type": "status", "state": "inspecting", "checkpoint_id": 0, "label": "Step 1" }
+
+// av_dropped counts readings cancelled because they missed the answer.
+{ "type": "status", "state": "done", "av_dropped": 0 }
 ```
 
 ## REST
