@@ -135,8 +135,8 @@ allocation. Run the AV server with
 ```bash
 PATH=/root/qwen-venv/bin:$PATH nohup /root/qwen-venv/bin/python -m sglang.launch_server \
   --model-path /workspace/models/nla-av --host 127.0.0.1 --port 30002 \
-  --disable-radix-cache --mem-fraction-static 0.50 --context-length 512 \
-  --disable-cuda-graph --trust-remote-code > /root/nla-av.log 2>&1 < /dev/null &
+  --disable-radix-cache --mem-fraction-static 0.60 --context-length 512 \
+  --cuda-graph-max-bs 8 --trust-remote-code > /root/nla-av.log 2>&1 < /dev/null &
 
 uv venv --system-site-packages /root/av-client-venv
 uv pip install --python /root/av-client-venv/bin/python \
