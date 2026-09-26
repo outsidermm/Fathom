@@ -58,6 +58,8 @@ export interface SeaScene {
   setPaused(paused: boolean): void;
   /** Pushes the scene back (fog) so data drawn over it reads first. */
   setReceded?(receded: boolean): void;
+  /** Draws a couple of fish to circle a point, in fractions of the view (0..1), or releases them. */
+  setAttractor?(point: { x: number; y: number } | null): void;
   dispose(): void;
 }
 
