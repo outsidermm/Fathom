@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { TopBar } from "@/components/observatory/top-bar";
 import { PromptConsole } from "@/components/observatory/prompt-console";
 import { TokenStream } from "@/components/observatory/token-stream";
+import { AvReadings } from "@/components/observatory/av-readings";
 import { FeatureInspector } from "@/components/observatory/feature-inspector";
 import { ClampTray } from "@/components/observatory/clamp-tray";
 import { ConnectedFeatureMap, ConnectedDiagnosticsFeed, ConnectedFeatureSearch } from "@/components/observatory/connected-deep";
@@ -41,9 +42,10 @@ export function Observatory() {
           <RunCompare />
         </div>
         <div className="grid min-h-[560px] flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
-          <div className="grid min-h-[560px] grid-rows-[minmax(350px,1fr)_auto] gap-4">
+          <div className="grid min-h-[560px] grid-rows-[minmax(350px,1fr)_auto_auto] gap-4">
             <ConnectedFeatureMap paused={motionPaused} />
             <TokenStream />
+            <AvReadings />
           </div>
           <aside data-coach-target="controls" className="flex flex-col gap-4">
             <FeatureInspector />
