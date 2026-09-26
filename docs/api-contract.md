@@ -2,8 +2,9 @@
 
 This is the shared source of truth so `apps/web` (Samuel, Hari) and `apps/api`
 (Kareem, James) can build in parallel without waiting on each other. The API
-currently streams **live Qwen text** and up to six checkpointed NLA AV
-interpretations while delivering the answer. Activation-map events, flags, and steering are planned; `/api/features`
+currently streams **live Qwen text**, up to six checkpointed NLA AV
+interpretations while delivering the answer, and steered branches from any
+reading. Activation-map events, flags, and feature clamps are planned; `/api/features`
 still returns placeholder data. The frontend should not present those
 placeholders as model internals. **Integration gap:** `apps/web` currently
 handles tokens and planned map/flag events, but drops `av`, `av_error`, and
@@ -23,8 +24,10 @@ and `apps/web/src/lib/contract.ts` (TypeScript) in the same commit.
 One websocket connection per browser tab. **No state-resuming reconnect for
 the hackathon** — on disconnect, the client opens a fresh connection and
 lets the user press Run or Rerun to send `start` again for a new run.
-Generation is not automatically replayed after a disconnect. The API does not persist runs or
-clamps.
+Generation is not automatically replayed after a disconnect. The API keeps a
+socket's last 32 runs in memory so they can be steered; nothing is persisted.
+Every event of a run carries its `run_id` (echoed from `start`, or a branch's
+new id).
 
 ### Client → server
 
@@ -32,7 +35,7 @@ clamps.
 // Start a generation run; qwen2.5-7b is the only connected model.
 // pace (default true) holds the text at each checkpoint until its AV
 // reading arrives or AV_HOLD_TIMEOUT (4 s) passes.
-{ "type": "start", "prompt": "string", "model": "qwen2.5-7b", "pace": true }
+{ "type": "start", "prompt": "string", "model": "qwen2.5-7b", "pace": true, "run_id": "optional" }
 
 // Reserved steering messages: currently return status:error and do not
 // change generation. Do not show these controls as available yet.
@@ -43,9 +46,12 @@ clamps.
 // Stop the current stream
 { "type": "stop" }
 
-// The user picked one of a reading's alternatives (see av_alternatives).
-// Acknowledged with steer_ack; nothing is steered yet. Safe to send at any time.
-{ "type": "steer", "checkpoint_id": 2, "alternative_id": 1 } // alternative_id 0..2
+// Branch run_id at one of its readings. Exactly one of alternative_id (0..2,
+// from av_alternatives), text (1..300 chars) or away: true. Stops whatever is
+// streaming; replied to with steer_ack, then (if applied) branch.
+{ "type": "steer", "run_id": "r1", "checkpoint_id": 2, "alternative_id": 1 }
+{ "type": "steer", "run_id": "r1", "checkpoint_id": 2, "text": "focus on electric cars" }
+{ "type": "steer", "run_id": "r1", "checkpoint_id": 2, "away": true }
 ```
 
 ### Server → client
@@ -87,10 +93,25 @@ clamps.
       "detail": "The step weighs loans, leases and interest rates." }
   ] }
 
-// Reply to steer. applied is always false until steering is connected;
-// this is not an error and does not end the run.
-{ "type": "steer_ack", "checkpoint_id": 2, "alternative_id": 1, "applied": false,
-  "message": "Steering is not connected yet" }
+// Reply to steer, under the parent's run_id. applied:false carries a message
+// and changes nothing else (not an error). note: a typed direction as
+// Qwen understood it, to show the user.
+{ "type": "steer_ack", "run_id": "r1", "checkpoint_id": 2, "alternative_id": 1,
+  "applied": true, "note": "optional" }
+
+// A steered run starts. Its text is the parent's up to position, then its own
+// token events (positions continue from there). It gets its own readings and
+// alternatives, so it can be steered again. opening/anchored: toward steers
+// open the section with the target opening (see notes).
+{ "type": "branch", "run_id": "b7", "parent_run_id": "r1", "checkpoint_id": 2,
+  "position": 139, "kind": "toward", "focus": "visiting dealerships",
+  "opening": "### 1. Explore Dealerships and Test Drive Cars", "anchored": true }
+
+// AR measurement after the branch's status:done: centered cosine of the
+// block-20 state at the section's opening with the AR reconstruction of the
+// reading's note (current) and the target's note (target), before and after.
+{ "type": "steer_score", "run_id": "b7",
+  "before": { "current": 0.68, "target": 0.26 }, "after": { "current": 0.29, "target": 0.35 } }
 
 // Planned only: not emitted by the current backend.
 // token_index ties it back to the "token" event above.
@@ -179,15 +200,43 @@ clamps.
   `apps/api/scripts/alternatives_eval.py` (20 prompts, 107 checkpoints)
   every checkpoint got 2-3 distinct, well-formed options, and a Qwen judge
   called 96% of options plausible steps for the task (median 3 s after the reading).
-- These are replays of answer prefixes; exact generation activations and
-  steerable directions still require target-model hooks.
+- These are replays of answer prefixes; the live answer's own activations are
+  not captured (SGLang has no hooks).
+
+## Steering (how `steer` works)
+
+- Qwen writes a title for the target (an alternative, or a typed request made
+  concrete, including "the opposite"), spliced into the original opening's
+  markup ("### 1. " + title). The sidecar replays the kept prefix with the
+  original and with the target opening; the difference of Qwen's block-20
+  residuals at the opening's last token is the steer. It is added, once and
+  at block 20 only, to every new token until the section's opening ends. It
+  moves the state by exactly the gap between the two real states: there is
+  no strength setting.
+- Toward steers are **anchored**: the branch opens with the target opening,
+  replayed under the steer, and Qwen writes the section from there. Away
+  steers (toward the average of the other alternatives' openings) are not
+  anchored; the model writes the heading itself.
+- A branch keeps the parent text before its checkpoint and the steers that
+  shaped it; re-steering the same checkpoint makes a sibling (earlier steers
+  after the point are dropped); steering a branch at a later reading stacks.
+  Branch readings replay the branch's steers. A plan-reading steer branches at
+  the first section, keeping the answer's opening sentence.
+- Measured on live answers (`apps/api/scripts/steer_eval.py`, report in
+  `scripts/out/steer_eval.md`): unanchored, the steer kept text fluent (4/5)
+  and left the reading's focus in 6 of 7 cases but reached the named target
+  about a third of the time; 2x or 3x the gap, or adding it at several layers,
+  broke the text ("or or or"). The first design, AR-reconstructed directions,
+  was topic-selective but steered less and lost punctuation. Anchored, a blind
+  judge scored all five toward cases "full" (their unsteered controls "none").
+  The AR only measures; it does not make the steer.
+- Branches decode greedily in the sidecar (HF, one at a time) while the
+  original is sampled by SGLang, so a comparison includes decoding changes.
 
 ## Open asks for whoever owns the real backend (from the 11 PM sync)
 
-1. `run_id` on every server event, echoed from `start` — without it, a late
-   event from a stopped run can leak into the next one.
-2. Feature dictionary at real scale: move `coords` into `GET /api/features`,
+1. Feature dictionary at real scale: move `coords` into `GET /api/features`,
    add `limit` and `?q=` search, decide which subset the map shows.
-3. `GET /api/clusters` → `{id, label, centroid}`, or confirm the frontend
+2. `GET /api/clusters` → `{id, label, centroid}`, or confirm the frontend
    should derive centroids from features client-side.
-4. Optional: `layer: number` on activations, for a depth-gauge stretch goal.
+3. Optional: `layer: number` on activations, for a depth-gauge stretch goal.
