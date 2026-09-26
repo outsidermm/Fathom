@@ -1,31 +1,19 @@
+import styles from "./legend.module.css";
+
 export function Legend() {
+  const glows = ["#1d6270", "#228596", "#25aabe", "#53cfdc", "#9deff3"];
   return (
-    <aside
-      aria-label="Feature map legend"
-      className="absolute bottom-3 right-3 z-10 max-w-52 rounded-lg border border-deep-ink/20 bg-abyss/90 px-3 py-2 font-body text-xs text-deep-ink shadow-lg"
-    >
-      <p className="mb-1 font-ui font-bold">Map key</p>
-      <div className="flex items-center gap-1">
-        <span>Weak</span>
-        {[1, 2, 3, 4, 5].map((i) => (
-          <span
-            key={i}
-            className="inline-block size-2 rounded-full"
-            style={{ backgroundColor: `var(--glow-${i})` }}
-          />
-        ))}
-        <span>Strong activation</span>
+    <aside className={styles.legend} aria-label="Feature map legend">
+      <div className={styles.strength}>
+        <span className={styles.ramp} aria-hidden="true">
+          {glows.map((fallback, index) => <span key={fallback} style={{ background: `var(--glow-${index + 1}, ${fallback})` }} />)}
+        </span>
+        <span>Weak → strong activation</span>
       </div>
-      <div className="mt-2 flex items-center gap-2">
-        <span className="inline-block size-3 rounded-full border-2 border-clamp-up" />
-        Clamped +
-      </div>
-      <div className="mt-1 flex items-center gap-2">
-        <span className="inline-block size-3 rounded-full border-2 border-clamp-down" />
-        Clamped −
-      </div>
-      <div className="mt-1 flex items-center gap-2">
-        <span className="text-alert">⚠</span>Flagged token
+      <div className={styles.keys}>
+        <span><i className={styles.up} aria-hidden="true" />Clamped +</span>
+        <span><i className={styles.down} aria-hidden="true" />Clamped −</span>
+        <span><b className={styles.alert} aria-hidden="true">⚠</b>Flagged</span>
       </div>
     </aside>
   );

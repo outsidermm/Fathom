@@ -13,6 +13,17 @@ export interface MapFeature {
   coords: { x: number; y: number; z?: number };
 }
 
+export interface MapFlag {
+  tokenIndex: number;
+  signature: string;
+  confidence: number;
+}
+
+export interface MapToken {
+  index: number;
+  text: string;
+}
+
 export interface ActivationSource {
   subscribe(fn: (batch: MapActivation[]) => void): () => void;
   forRun(runId: string): MapActivation[];
@@ -57,7 +68,7 @@ function publish(runId: string, activations: MapActivation[]) {
 }
 
 export const fakeActivationBus: ActivationSource & {
-  start(prompt: string, onDone: () => void): string;
+  start(prompt: string, onDone: () => void, onToken?: (token: MapToken, flags: MapFlag[]) => void): string;
   stop(): void;
 } = {
   subscribe(fn) {
@@ -70,7 +81,7 @@ export const fakeActivationBus: ActivationSource & {
   forToken(runId, tokenIndex) {
     return (history.get(runId) ?? []).filter((entry) => entry.tokenIndex === tokenIndex);
   },
-  start(prompt, onDone) {
+  start(prompt, onDone, onToken) {
     this.stop();
     const runId = crypto.randomUUID();
     activeRunId = runId;
@@ -91,6 +102,12 @@ export const fakeActivationBus: ActivationSource & {
         });
       }
       publish(runId, batch);
+      const strongest = batch.reduce((best, entry) => entry.value > best.value ? entry : best);
+      const signature = ["hedging", "refusal", "unsupported"][Math.floor(tokenIndex / 5) % 3];
+      const flags: MapFlag[] = tokenIndex % 5 === 3
+        ? [{ tokenIndex, signature, confidence: strongest.value }]
+        : [];
+      onToken?.({ index: tokenIndex, text: words[tokenIndex] }, flags);
       tokenIndex += 1;
       if (tokenIndex >= words.length) {
         this.stop();
