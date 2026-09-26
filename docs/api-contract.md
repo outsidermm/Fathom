@@ -39,6 +39,10 @@ clamps.
 
 // Stop the current stream
 { "type": "stop" }
+
+// The user picked one of a reading's alternatives (see av_alternatives).
+// Acknowledged with steer_ack; nothing is steered yet. Safe to send at any time.
+{ "type": "steer", "checkpoint_id": 2, "alternative_id": 1 } // alternative_id 0..2
 ```
 
 ### Server → client
@@ -64,6 +68,25 @@ clamps.
 // AV failed; the Qwen answer remains valid and status:done still follows.
 { "type": "av_error", "message": "AV unavailable: ...", "checkpoint_id": 0,
   "position": 95, "label": "Step 1" }
+
+// 2-3 other steps the model could take at a checkpoint, in the reading's form
+// (an "-ing" focus plus a short note). Qwen writes them from the task, the
+// answer up to the checkpoint and the AV note: they are suggestions, not
+// readings of the model's state, and the UI must say so. Always sent after
+// the checkpoint's own "av" event, and may arrive after status:done.
+// Never sent for an av_error checkpoint; missing when generation failed.
+{ "type": "av_alternatives", "checkpoint_id": 2, "position": 95, "label": "Step 1",
+  "alternatives": [
+    { "id": 0, "focus": "weighing what type of vehicle fits",
+      "detail": "The section turns to vehicle size, seating and features." },
+    { "id": 1, "focus": "comparing loan and lease financing",
+      "detail": "The step weighs loans, leases and interest rates." }
+  ] }
+
+// Reply to steer. applied is always false until steering is connected;
+// this is not an error and does not end the run.
+{ "type": "steer_ack", "checkpoint_id": 2, "alternative_id": 1, "applied": false,
+  "message": "Steering is not connected yet" }
 
 // Planned only: not emitted by the current backend.
 // token_index ties it back to the "token" event above.
@@ -137,6 +160,14 @@ clamps.
   and not sent: AV output is not streamed, so it would appear detached from its
   section. `status:done` is sent immediately with the `av_dropped` count. A
   stopped run cancels all pending AV work.
+- Each `av` reading starts an alternatives request to Qwen right away
+  (`AV_ALTERNATIVES`, default 3; 0 turns them off; `AV_ALT_CONCURRENCY`,
+  default 2). Those still running at `status:done` get `AV_ALT_GRACE` (10 s)
+  more, so a client should keep a finished run listening for
+  `av_alternatives`; a new `start` or `stop` cancels them. In
+  `apps/api/scripts/alternatives_eval.py` (20 prompts, 107 checkpoints)
+  every checkpoint got 2-3 distinct, well-formed options, and a Qwen judge
+  called 96% of options plausible steps for the task (median 3 s after the reading).
 - These are replays of answer prefixes; exact generation activations and
   steerable directions still require target-model hooks.
 

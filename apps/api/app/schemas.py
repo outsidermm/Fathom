@@ -47,7 +47,15 @@ class StopMessage(BaseModel):
     type: Literal["stop"] = "stop"
 
 
-ClientMessage = Union[StartMessage, ClampMessage, ResetClampsMessage, StopMessage]
+class SteerMessage(BaseModel):
+    """The user picked one of a reading's alternatives. Acknowledged only."""
+
+    type: Literal["steer"] = "steer"
+    checkpoint_id: int = Field(ge=0)
+    alternative_id: int = Field(ge=0, le=2)
+
+
+ClientMessage = Union[StartMessage, ClampMessage, ResetClampsMessage, StopMessage, SteerMessage]
 
 
 # ---- server -> client -------------------------------------------------------
@@ -108,6 +116,34 @@ class AVErrorEvent(BaseModel):
     label: str
 
 
+class AVAlternative(BaseModel):
+    id: int = Field(ge=0, le=2)
+    # Same form as a reading: an "-ing" label and a short AV-style note.
+    focus: str
+    detail: str
+
+
+class AVAlternativesEvent(BaseModel):
+    """Other steps the model could take at a checkpoint, written by Qwen from
+    the task, the answer so far and the AV note. Suggestions, not readings.
+    Sent after its checkpoint's ``av`` event, possibly after status:done."""
+
+    type: Literal["av_alternatives"] = "av_alternatives"
+    checkpoint_id: int = Field(ge=0)
+    position: int = Field(ge=0)
+    label: str
+    alternatives: list[AVAlternative] = Field(min_length=2, max_length=3)
+
+
+class SteerAckEvent(BaseModel):
+    type: Literal["steer_ack"] = "steer_ack"
+    checkpoint_id: int = Field(ge=0)
+    alternative_id: int = Field(ge=0, le=2)
+    # Steering is not connected: the choice is recorded by the client only.
+    applied: Literal[False] = False
+    message: str
+
+
 class StatusEvent(BaseModel):
     type: Literal["status"] = "status"
     state: StreamState
@@ -119,7 +155,10 @@ class StatusEvent(BaseModel):
     av_dropped: Optional[int] = None
 
 
-ServerMessage = Union[TokenEvent, ActivationEvent, FlagEvent, AVEvent, AVErrorEvent, StatusEvent]
+ServerMessage = Union[
+    TokenEvent, ActivationEvent, FlagEvent, AVEvent, AVErrorEvent,
+    AVAlternativesEvent, SteerAckEvent, StatusEvent,
+]
 
 
 # ---- REST -------------------------------------------------------------------

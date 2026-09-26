@@ -14,7 +14,14 @@ from fastapi.testclient import TestClient
 from app.av_text import clean_focus, split_explanation
 from app.checkpoints import PLAN, Checkpoint, next_checkpoint
 from app.main import app
-from app.qwen_stream import _request_av, qwen_deltas, run_qwen_stream, summarize_focus
+from app.qwen_stream import (
+    _request_av,
+    alternatives_count,
+    qwen_deltas,
+    request_alternatives,
+    run_qwen_stream,
+    summarize_focus,
+)
 
 
 class SSEBody(httpx.AsyncByteStream):
@@ -39,6 +46,28 @@ def av_event(checkpoint_id: int, checkpoint: Checkpoint, explanation: str = "Rea
         "sample": "replayed_last_content_token", "checkpoint_id": checkpoint_id,
         "position": checkpoint.position, "label": checkpoint.label,
     }
+
+
+def alternatives_event(reading: dict) -> dict:
+    return {
+        "type": "av_alternatives", "checkpoint_id": reading["checkpoint_id"],
+        "position": reading["position"], "label": reading["label"],
+        "alternatives": [
+            {"id": 0, "focus": "weighing vehicle types", "detail": "Vehicle type."},
+            {"id": 1, "focus": "comparing financing options", "detail": "Financing."},
+        ],
+    }
+
+
+async def no_alternatives(*_args, **_kwargs) -> None:
+    return None
+
+
+def patch_alternatives(test: unittest.TestCase, fake=no_alternatives) -> None:
+    """Keep tests offline: .env points request_alternatives at the live Pod."""
+    patcher = patch("app.qwen_stream.request_alternatives", fake)
+    patcher.start()
+    test.addCleanup(patcher.stop)
 
 
 def chunks(text: str, size: int = 25) -> list[str]:
@@ -85,6 +114,7 @@ class CheckpointTests(unittest.TestCase):
 class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.events: list[dict] = []
+        patch_alternatives(self)
 
     async def send(self, event: dict) -> None:
         self.events.append(event)
@@ -367,7 +397,217 @@ class QwenStreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.events[-1]["state"], "done")
 
 
+class AlternativesTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.events: list[dict] = []
+
+    async def send(self, event: dict) -> None:
+        self.events.append(event)
+
+    def kinds(self) -> list[str]:
+        return [event["type"] for event in self.events]
+
+    async def run_stream(self, fake_alternatives, fake_av=None, **options) -> None:
+        async def instant_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+            return av_event(checkpoint_id, checkpoint)
+
+        with patch("app.qwen_stream.qwen_deltas", streaming(*chunks(ANSWER))), \
+                patch("app.qwen_stream._request_av", fake_av or instant_av), \
+                patch("app.qwen_stream.request_alternatives", fake_alternatives):
+            await run_qwen_stream("Help buy a car", self.send, **options)
+
+    async def test_alternatives_follow_their_reading(self) -> None:
+        prefixes: dict[str, str] = {}
+
+        async def fake_alternatives(_prompt, answer, reading, *, n, client=None):
+            prefixes[reading["label"]] = answer
+            return alternatives_event(reading)  # Ready before later readings are shown.
+
+        await self.run_stream(fake_alternatives)
+
+        readings = [e for e in self.events if e["type"] == "av"]
+        options = [e for e in self.events if e["type"] == "av_alternatives"]
+        self.assertEqual([e["checkpoint_id"] for e in options], [e["checkpoint_id"] for e in readings])
+        for option in options:
+            reading = next(e for e in readings if e["checkpoint_id"] == option["checkpoint_id"])
+            self.assertLess(self.events.index(reading), self.events.index(option))
+            self.assertEqual(option["position"], reading["position"])
+        self.assertEqual(prefixes["Plan"], "")
+        self.assertEqual(prefixes["Step 2"], INTRO + STEP_1 + "2. **Research**:")
+
+    async def test_failed_readings_get_no_alternatives(self) -> None:
+        calls = 0
+
+        async def failing_av(_prompt, _answer, *, checkpoint_id, checkpoint, client=None):
+            return {"type": "av_error", "message": "AV unavailable", "checkpoint_id": checkpoint_id,
+                    "position": checkpoint.position, "label": checkpoint.label}
+
+        async def fake_alternatives(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+
+        await self.run_stream(fake_alternatives, failing_av)
+        self.assertEqual(calls, 0)
+        self.assertEqual(self.events[-1]["state"], "done")
+
+    async def test_late_alternatives_are_sent_after_done(self) -> None:
+        async def after_done(_prompt, _answer, reading, *, n, client=None):
+            while not any(e.get("state") == "done" for e in self.events):
+                await asyncio.sleep(0.005)
+            return alternatives_event(reading)
+
+        await self.run_stream(after_done)
+
+        done = next(i for i, e in enumerate(self.events) if e.get("state") == "done")
+        self.assertEqual(self.kinds()[done + 1:], ["av_alternatives"] * 4)
+
+    async def test_grace_bounds_the_wait_after_done(self) -> None:
+        cancelled = asyncio.Event()
+
+        async def stuck_alternatives(*_args, **_kwargs):
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        with patch.dict("os.environ", {"AV_ALT_GRACE": "0.05"}):
+            await asyncio.wait_for(self.run_stream(stuck_alternatives), timeout=2)
+
+        self.assertNotIn("av_alternatives", self.kinds())
+        self.assertEqual(self.events[-1]["state"], "done")
+        self.assertTrue(cancelled.is_set())
+
+    async def test_cancelled_run_emits_no_alternatives(self) -> None:
+        started = asyncio.Event()
+
+        async def slow_alternatives(_prompt, _answer, reading, *, n, client=None):
+            started.set()
+            await asyncio.sleep(60)
+            return alternatives_event(reading)
+
+        run = asyncio.create_task(self.run_stream(slow_alternatives))
+        await asyncio.wait_for(started.wait(), timeout=1)
+        run.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await run
+        self.assertNotIn("av_alternatives", self.kinds())
+
+    async def test_zero_disables_alternatives(self) -> None:
+        calls = 0
+
+        async def fake_alternatives(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+
+        with patch.dict("os.environ", {"AV_ALTERNATIVES": "0"}):
+            await self.run_stream(fake_alternatives)
+        self.assertEqual(calls, 0)
+        for value, count in (("0", 0), ("1", 2), ("2", 2), ("3", 3), ("9", 3), ("x", 3)):
+            with patch.dict("os.environ", {"AV_ALTERNATIVES": value}):
+                self.assertEqual(alternatives_count(), count, value)
+
+    async def test_request_carries_task_prefix_and_note(self) -> None:
+        bodies: list[dict] = []
+        reply = {"alternatives": [
+            {"focus": "Setting your car budget (step 1)", "detail": "Near the reading."},
+            {"focus": "weighing what type of vehicle fits", "detail": "Vehicle type, size, seats."},
+            {"focus": "Weighing what type of vehicle fits.", "detail": "A duplicate."},
+            {"focus": "comparing loan and lease financing", "detail": "Loans and leases."},
+            {"focus": "planning a dealership visit (Saturday)", "detail": "Test drives."},
+            {"focus": "estimating insurance costs", "detail": "Beyond the quota."},
+        ]}
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            bodies.append(json.loads(request.content))
+            return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(reply)}}]})
+
+        reading = {**av_event(2, Checkpoint(71, 90, "Step 1")),
+                   "detail": "The text sets a car budget.", "focus": "setting a car budget"}
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            event = await request_alternatives(
+                "Help buy a car", "1. **Budget**:", reading, n=3, client=client,
+            )
+
+        request = bodies[0]["messages"][-1]["content"]
+        for part in ("Help buy a car", "1. **Budget**:", "The text sets a car budget."):
+            self.assertIn(part, request)
+        schema = bodies[0]["response_format"]["json_schema"]["schema"]
+        self.assertEqual(schema["properties"]["alternatives"]["maxItems"], 4)  # One spare.
+        self.assertEqual(
+            (event["checkpoint_id"], event["position"], event["label"]), (2, 71, "Step 1")
+        )
+        self.assertEqual([a["focus"] for a in event["alternatives"]], [
+            "weighing what type of vehicle fits", "comparing loan and lease financing",
+            "planning a dealership visit",
+        ])
+        self.assertEqual([a["id"] for a in event["alternatives"]], [0, 1, 2])
+
+    async def test_request_falls_back_without_json_mode(self) -> None:
+        bodies: list[dict] = []
+        content = 'Here you go: {"alternatives": [{"focus": "weighing vehicle types", ' \
+                  '"detail": "Types."}, {"focus": "planning a dealership visit", "detail": "Visit."}]}'
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            bodies.append(json.loads(request.content))
+            if "response_format" in bodies[-1]:
+                return httpx.Response(400)
+            return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            event = await request_alternatives(
+                "Help buy a car", "", av_event(0, PLAN), n=2, client=client,
+            )
+
+        self.assertEqual(len(bodies), 2)
+        self.assertEqual(len(event["alternatives"]), 2)
+
+    async def test_noun_focus_is_relabeled_from_its_detail(self) -> None:
+        reply = {"alternatives": [
+            {"focus": "veto override", "detail": "Congress overrides a veto by two thirds."},
+            {"focus": "weighing committee amendments", "detail": "Committees amend the bill."},
+        ]}
+        transport = httpx.MockTransport(lambda _: httpx.Response(
+            200, json={"choices": [{"message": {"content": json.dumps(reply)}}]}
+        ))
+        notes: list[str] = []
+
+        async def fake_focus(note, *, client=None):
+            notes.append(note)
+            return "overriding a presidential veto"
+
+        with patch("app.qwen_stream.summarize_focus", fake_focus):
+            async with httpx.AsyncClient(transport=transport) as client:
+                event = await request_alternatives(
+                    "How does a bill become law?", "", av_event(0, PLAN), n=2, client=client,
+                )
+
+        self.assertEqual(notes, ["Congress overrides a veto by two thirds."])
+        self.assertEqual([a["focus"] for a in event["alternatives"]], [
+            "overriding a presidential veto", "weighing committee amendments",
+        ])
+
+    async def test_request_failures_are_none(self) -> None:
+        replies = [
+            httpx.Response(503),
+            httpx.Response(200, json={"choices": [{"message": {"content": "not json"}}]}),
+            httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(
+                {"alternatives": [{"focus": "weighing vehicle types", "detail": "Only one."}]}
+            )}}]}),
+        ]
+        for reply in replies:
+            transport = httpx.MockTransport(lambda _, reply=reply: reply)
+            async with httpx.AsyncClient(transport=transport) as client:
+                with self.assertLogs("app.qwen_stream", "WARNING"):
+                    self.assertIsNone(await request_alternatives(
+                        "Help buy a car", "", av_event(0, PLAN), client=client,
+                    ))
+
+
 class WebSocketBridgeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        patch_alternatives(self)
+
     def test_prompt_streams_qwen_text_to_websocket(self) -> None:
         async def fake_av(_prompt: str, _answer: str, *, checkpoint_id, checkpoint, client=None) -> dict:
             return av_event(checkpoint_id, checkpoint, "The answer is a greeting.")
@@ -388,6 +628,18 @@ class WebSocketBridgeTests(unittest.TestCase):
         self.assertLess(kinds.index("av"), kinds.index("token"))  # The plan, before any text.
         self.assertEqual("".join(e["text"] for e in events if e["type"] == "token"), "Hello world")
         self.assertEqual(events[-1]["state"], "done")
+
+    def test_steer_is_acknowledged_without_ending_the_run(self) -> None:
+        with TestClient(app) as client:
+            with client.websocket_connect("/ws/stream") as websocket:
+                websocket.receive_json()  # idle
+                websocket.send_json({"type": "steer", "checkpoint_id": 2, "alternative_id": 1})
+                self.assertEqual(websocket.receive_json(), {
+                    "type": "steer_ack", "checkpoint_id": 2, "alternative_id": 1,
+                    "applied": False, "message": "Steering is not connected yet",
+                })
+                websocket.send_json({"type": "steer", "checkpoint_id": 2, "alternative_id": 5})
+                self.assertEqual(websocket.receive_json()["state"], "error")
 
 
 if __name__ == "__main__":

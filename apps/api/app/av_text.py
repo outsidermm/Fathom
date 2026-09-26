@@ -18,6 +18,16 @@ def split_explanation(explanation: str) -> tuple[str, str]:
     return (sentences[0] if sentences else ""), " ".join(sentences[1:])
 
 
+_STOP_WORDS = {"a", "an", "the", "of", "for", "to", "and", "or", "in", "on", "with", "your", "about"}
+
+
+def similar_focus(a: str, b: str) -> bool:
+    """Whether two focus phrases name the same step: equal, or sharing at least
+    60% of their content words ("selecting a location" / "selecting a garden location")."""
+    x, y = ({w for w in re.findall(r"[a-z]+", p.lower()) if w not in _STOP_WORDS} for p in (a, b))
+    return a.lower() == b.lower() or bool(x | y) and len(x & y) / len(x | y) >= 0.6
+
+
 def clean_focus(text: str, note: str = "") -> str | None:
     """A 2-10 word, lowercase-first phrase from a model's label, or None.
 
