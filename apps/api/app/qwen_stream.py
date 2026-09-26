@@ -13,16 +13,21 @@ from .schemas import AVErrorEvent, AVEvent, StatusEvent, TokenEvent
 SendEvent = Callable[[dict], Awaitable[None]]
 
 
+def _qwen_endpoint() -> tuple[str, str, dict[str, str]]:
+    """(chat completions URL, model name, auth headers) for the Qwen server."""
+    base_url = os.environ.get("QWEN_API_BASE", "http://127.0.0.1:30001/v1").rstrip("/")
+    model = os.environ.get("QWEN_MODEL", "qwen2.5-7b")
+    api_key = os.environ.get("QWEN_API_KEY")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    return f"{base_url}/chat/completions", model, headers
+
+
 async def qwen_deltas(
     prompt: str, *, client: httpx.AsyncClient | None = None
 ) -> AsyncIterator[str]:
     """Yield exact text deltas from SGLang's chat-completions SSE response."""
-    base_url = os.environ.get("QWEN_API_BASE", "http://127.0.0.1:30001/v1").rstrip("/")
-    model = os.environ.get("QWEN_MODEL", "qwen2.5-7b")
-    api_key = os.environ.get("QWEN_API_KEY")
-    headers = {"Accept": "text/event-stream"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    url, model, headers = _qwen_endpoint()
+    headers = {**headers, "Accept": "text/event-stream"}
 
     owns_client = client is None
     if client is None:
@@ -33,7 +38,7 @@ async def qwen_deltas(
     try:
         async with client.stream(
             "POST",
-            f"{base_url}/chat/completions",
+            url,
             headers=headers,
             json={
                 "model": model,
