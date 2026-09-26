@@ -1,0 +1,3 @@
+project-includes = ["apps/api"]
+search-path = ["apps/api"]
+python-interpreter-path = "apps/api/.venv/bin/python"
