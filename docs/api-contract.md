@@ -11,8 +11,10 @@ and `apps/web/src/lib/contract.ts` (TypeScript) in the same commit.
 
 ## WebSocket — `ws://localhost:8000/ws/stream`
 
-One connection per generation session. Query param: `?session_id=<uuid>`
-(client-generated, used for reconnects).
+// Steer: set a clamp value for a feature. This does NOT trigger a new run —
+// it's stored server-side and applied on the NEXT "start" message. Send
+// "start" again with the same prompt to see the steered output.
+{ "type": "clamp", "feature_id": "string", "value": -1.0 } // -1..1
 
 ### Client → server
 
@@ -20,7 +22,9 @@ One connection per generation session. Query param: `?session_id=<uuid>`
 // Start a generation run
 { "type": "start", "prompt": "string", "model": "gemma-2b" | "qwen2.5-7b" }
 
-// Steer: clamp a feature up/down and trigger regeneration from the same prompt
+// Steer: set a clamp value for a feature. This does NOT trigger a new run —
+// it's stored server-side and applied on the NEXT "start" message. Send
+// "start" again with the same prompt to see the steered output.
 { "type": "clamp", "feature_id": "string", "value": -1.0 } // -1..1
 
 // Reset all clamps to 0 (no intervention)
@@ -43,7 +47,7 @@ One connection per generation session. Query param: `?session_id=<uuid>`
   "token_index": 0,
   "feature_id": "feat_4821",
   "value": 0.73,          // 0..1 firing strength
-  "coords": { "x": 12.4, "y": -3.1, "z": 0.8 } // precomputed layout position
+  "coords": { "x": 12.4, "y": -3.1, "z": 0.8 } // precomputed 3D layout position; all axes required
 }
 
 // A failure-signature detector firing mid-stream (the "diagnostic instrument" hook)

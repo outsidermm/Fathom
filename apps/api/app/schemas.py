@@ -47,7 +47,7 @@ ClientMessage = Union[StartMessage, ClampMessage, ResetClampsMessage, StopMessag
 class Coords(BaseModel):
     x: float
     y: float
-    z: Optional[float] = None
+    z: float
 
 
 class TokenEvent(BaseModel):

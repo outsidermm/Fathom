@@ -55,7 +55,7 @@ async def run_mock_stream(
     this is what makes "clamp a feature, watch the output change" visible
     even before the real steering path exists.
     """
-    await send(StatusEvent(state="streaming").model_dump())
+    await send(StatusEvent(state="streaming").model_dump(exclude_none=True))
 
     tokens = (prompt.split() or ["..."]) + _FAKE_CONTINUATION
     for i, word in enumerate(tokens):
@@ -96,7 +96,7 @@ async def run_mock_stream(
                     ).model_dump()
                 )
 
-    await send(StatusEvent(state="done").model_dump())
+    await send(StatusEvent(state="done").model_dump(exclude_none=True))
 
 
 def _coords_for(feature_id: str) -> Coords:

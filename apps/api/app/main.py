@@ -61,7 +61,7 @@ async def ws_stream(websocket: WebSocket) -> None:
         run_task = None
 
     try:
-        await send(StatusEvent(state="idle").model_dump())
+        await send(StatusEvent(state="idle").model_dump(exclude_none=True))
         while True:
             raw = await websocket.receive_json()
             msg_type = raw.get("type")
@@ -70,7 +70,9 @@ async def ws_stream(websocket: WebSocket) -> None:
                 try:
                     msg = StartMessage.model_validate(raw)
                 except ValidationError as exc:
-                    await send(StatusEvent(state="error", message=str(exc)).model_dump())
+                    await send(
+                        StatusEvent(state="error", message=str(exc)).model_dump(exclude_none=True)
+                    )
                     continue
                 cancel_run()
                 run_task = asyncio.create_task(run_mock_stream(msg.prompt, clamps, send))
@@ -86,11 +88,13 @@ async def ws_stream(websocket: WebSocket) -> None:
             elif msg_type == "stop":
                 StopMessage.model_validate(raw)
                 cancel_run()
-                await send(StatusEvent(state="idle").model_dump())
+                await send(StatusEvent(state="idle").model_dump(exclude_none=True))
 
             else:
                 await send(
-                    StatusEvent(state="error", message=f"unknown message type: {msg_type}").model_dump()
+                    StatusEvent(
+                        state="error", message=f"unknown message type: {msg_type}"
+                    ).model_dump(exclude_none=True)
                 )
     except WebSocketDisconnect:
         cancel_run()

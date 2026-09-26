@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useActivationStream } from "@/hooks/use-activation-stream";
+import { useActivationStream, type FlagEntry } from "@/hooks/use-activation-stream";
 import type { Model } from "@/lib/contract";
 
 const SIGNATURE_LABEL: Record<string, string> = {
@@ -71,7 +71,7 @@ export function Observatory() {
             interpretability observatory
           </h1>
           <span
-            className={`h-2 w-2 rounded-full ${connected ? "bg-signal-cold" : "bg-muted-foreground"}`}
+            className={`h-2 w-2 rounded-full ${connected ? "bg-foreground" : "bg-muted-foreground"}`}
             title={connected ? "connected" : "disconnected"}
           />
         </header>
@@ -146,32 +146,78 @@ function FeatureMap({
   clampedIds,
   onToggleClamp,
 }: {
-  activations: { featureId: string; value: number; coords: { x: number; y: number } }[];
-  flags: unknown[];
+  activations: {
+    tokenIndex: number;
+    featureId: string;
+    value: number;
+    coords: { x: number; y: number };
+  }[];
+  flags: FlagEntry[];
   clampedIds: Set<string>;
   onToggleClamp: (featureId: string) => void;
 }) {
   // Placeholder 2D scatter. Swap for the real three.js/D3 force layout —
   // coords already arrive pre-projected from the API (see docs/api-contract.md).
-  // Click a dot to clamp that feature — this is the steering demo moment.
+  // The visible dots are decorative; one real button per feature provides
+  // an accessible, keyboard-focusable clamp target over the map.
+  const visibleActivations = activations.slice(-200);
+  const latestByFeature = new Map<string, (typeof visibleActivations)[number]>();
+  for (const activation of visibleActivations) {
+    latestByFeature.set(activation.featureId, activation);
+  }
+
   return (
     <div className="relative flex items-center justify-center overflow-hidden bg-black">
       <svg viewBox="-40 -40 80 80" className="h-[90%] w-[90%]">
-        {activations.slice(-200).map((a, i) => {
-          const isClamped = clampedIds.has(a.featureId);
+        {visibleActivations.map((a, i) => {
+          const isFlagged = flags.some((flag) => flag.tokenIndex === a.tokenIndex);
           return (
             <circle
               key={i}
               cx={a.coords.x}
               cy={a.coords.y}
-              r={(isClamped ? 1.2 : 0.6) + a.value * 1.4}
-              fill={flags.length > 0 ? "var(--signal-alert)" : "var(--signal-hot)"}
+              r={0.6 + a.value * 1.4}
+              fill={isFlagged ? "var(--signal-alert)" : "var(--signal-hot)"}
               opacity={Math.max(0.15, a.value)}
-              stroke={isClamped ? "var(--signal-cold)" : "none"}
-              strokeWidth={isClamped ? 0.4 : 0}
-              className="cursor-pointer"
-              onClick={() => onToggleClamp(a.featureId)}
             />
+          );
+        })}
+        {Array.from(latestByFeature.values()).map((a) => {
+          const isClamped = clampedIds.has(a.featureId);
+          const isFlagged = flags.some((flag) => flag.tokenIndex === a.tokenIndex);
+          const radius = (isClamped ? 1.2 : 0.6) + a.value * 1.4;
+          const diameterPercent = `${(radius * 2 * 100) / 6}%`;
+
+          return (
+            <foreignObject
+              key={a.featureId}
+              x={a.coords.x - 3}
+              y={a.coords.y - 3}
+              width={6}
+              height={6}
+            >
+              <button
+                type="button"
+                aria-label={`Toggle clamp for feature ${a.featureId}`}
+                aria-pressed={isClamped}
+                onClick={() => onToggleClamp(a.featureId)}
+                className="flex h-full w-full items-center justify-center rounded-full border-0 bg-transparent p-0 outline-none focus-visible:ring-1 focus-visible:ring-signal-cold focus-visible:ring-offset-1 focus-visible:ring-offset-black"
+              >
+                <span
+                  aria-hidden="true"
+                  className="block rounded-full"
+                  style={{
+                    width: diameterPercent,
+                    height: diameterPercent,
+                    backgroundColor: isFlagged
+                      ? "var(--signal-alert)"
+                      : "var(--signal-hot)",
+                    opacity: Math.max(0.15, a.value),
+                    boxShadow: isClamped ? "0 0 0 0.4px var(--signal-cold)" : "none",
+                  }}
+                />
+              </button>
+            </foreignObject>
           );
         })}
       </svg>

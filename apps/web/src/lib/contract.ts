@@ -20,7 +20,7 @@ export type ClientMessage =
 export interface Coords {
   x: number;
   y: number;
-  z?: number;
+  z: number;
 }
 
 export type ServerMessage =
