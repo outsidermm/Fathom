@@ -1,7 +1,7 @@
 """Pod-local Qwen layer-20 replay and NLA activation verbalization service.
 
 Run with Transformers 4.x and the upstream ``nla_inference.py`` on PYTHONPATH.
-This sidecar stays on loopback; the API reaches it through a private tunnel.
+Models load at startup, so /health answers only once requests can be served.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import os
 import re
 import threading
 import time
+from contextlib import asynccontextmanager
 from functools import lru_cache
 
 import httpx
@@ -46,7 +47,13 @@ def _models():
     return tokenizer, model, av
 
 
-app = FastAPI(title="Qwen activation verbalizer")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    _models()
+    yield
+
+
+app = FastAPI(title="Qwen activation verbalizer", lifespan=lifespan)
 
 
 class ExplainRequest(BaseModel):
