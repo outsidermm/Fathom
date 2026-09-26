@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 Model = Literal["gemma-2b", "qwen2.5-7b"]
 Signature = Literal["hedging", "refusal", "unsupported"]
-StreamState = Literal["idle", "streaming", "done", "error"]
+StreamState = Literal["idle", "streaming", "inspecting", "done", "error"]
 
 
 # ---- client -> server -----------------------------------------------------
@@ -22,6 +22,8 @@ class StartMessage(BaseModel):
     type: Literal["start"] = "start"
     prompt: str = Field(max_length=16000)
     model: Model
+    # Hold text at each checkpoint until its AV reading arrives (or times out).
+    pace: bool = True
 
     @field_validator("prompt")
     @classmethod
