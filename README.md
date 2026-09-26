@@ -13,12 +13,16 @@ generates — click a feature, clamp it, regenerate, watch the output change.
 See `AGENTS.md` for frontend AI-assistant guidelines and `docs/api-contract.md`
 for the interface both sides build against.
 
+Repository owner and deployment documentation: [outsidermm](https://github.com/outsidermm).
+The NLA models and inference client are upstream work by
+[Kit Fraser-Taliente and coauthors](https://transformer-circuits.pub/2026/nla/index.html).
+
 ## Repo layout
 
 ```
 apps/web/    Next.js + TypeScript + shadcn/ui frontend
 apps/api/    FastAPI backend — currently a mock activation stream
-docs/        API contract, decisions
+docs/        API contract, Runpod runbook, live orchestration design
 docker-compose.yml   Postgres
 ```
 
@@ -34,6 +38,10 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 Health check: `curl localhost:8000/api/health`
+This command runs the mock API. For the separate Runpod model setup, see
+[the inference runbook](docs/runpod-inference.md). For the planned path from
+live generation to explanation and task steering, see
+[the orchestration design](docs/orchestration.md).
 
 **Frontend**:
 
@@ -59,9 +67,9 @@ docker compose up -d
 - [x] Repo scaffolded, frontend and backend build/typecheck clean
 - [x] Mock websocket stream matching the real contract — frontend can build
       against this without waiting on the model pipeline
-- [ ] NLA vs. SAE decision (validate NLA via Neuronpedia's hosted demo first;
-      fall back to SAE/Gemma Scope if it's not clearly better by the team's
-      cutoff time)
+- [x] Download Qwen2.5-7B-Instruct, NLA AV, and NLA AR checkpoints to the
+      Runpod Global volume; verify one AV random-vector smoke test
+- [ ] Validate AV on real Qwen layer-20 activations and AR reconstruction
 - [ ] Real activation hooks replacing `apps/api/app/mock_stream.py`
 - [ ] Real three.js/D3 force-layout visualization replacing the placeholder
       SVG scatter in `apps/web/src/components/observatory/observatory.tsx`
