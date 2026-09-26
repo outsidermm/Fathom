@@ -6,11 +6,8 @@ other way. The split is by *file ownership*, so two Codex sessions never
 edit the same file at once.
 
 **Read first:** `docs/design-system.md` (the look), `docs/api-contract.md`
-(the data). The backend now streams live Qwen text. Activation and flag events,
-feature coordinates in the dictionary, and steering are still pending. The
-frontend can handle the planned event shapes, but the full demo loop below
-requires those backend capabilities. Do not present placeholder feature data
-as Qwen internals.
+(the data). Everything here builds against the **mock API** in `apps/api`.
+Nothing waits on Kareem/James's real model pipeline.
 
 **End state at midnight:** the app is fully re-themed to the HackGT seaside
 look, and against the mock you can type a prompt → watch tokens surface

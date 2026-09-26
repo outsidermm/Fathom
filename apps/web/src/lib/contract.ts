@@ -31,7 +31,6 @@ export type ServerMessage =
       feature_id: string;
       value: number; // 0..1
       coords: Coords;
-      explanation?: string;
     }
   | {
       type: "flag";
