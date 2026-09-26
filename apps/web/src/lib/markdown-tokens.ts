@@ -27,7 +27,6 @@ export function rehypeStreamTokens(tokens: readonly Token[], markers: readonly S
   const source = tokens.map((token) => token.text).join("");
 
   return () => (tree: Root) => {
-    const annotated = new Set<number>();
     let nextCut = 0;
     visit(tree, "text", (node: Text, index, parent) => {
       const start = node.position?.start.offset;
@@ -57,8 +56,6 @@ export function rehypeStreamTokens(tokens: readonly Token[], markers: readonly S
           ? node.value
           : node.value.slice(Math.max(0, token.start - textStart), token.end - textStart);
         if (!value) continue;
-        const showFlag = !annotated.has(token.index) && !(parent.type === "element" && parent.tagName === "a");
-        annotated.add(token.index);
         // Readings that land on the same text (a steered section: the parent's
         // reading and the branch's) share one marker, the latest.
         let section: string | undefined;
@@ -68,7 +65,6 @@ export function rehypeStreamTokens(tokens: readonly Token[], markers: readonly S
           tagName: "span",
           properties: {
             "data-token-index": token.index,
-            "data-token-flag": showFlag,
             ...(section ? { "data-section": section } : {}),
           },
           children: [{ type: "text", value }],

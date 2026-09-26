@@ -113,13 +113,13 @@ export default function StyleguidePage() {
           </div>
           <div>
             <h3 className={styles.subheading}>PaperNote</h3>
-            <div className={styles.sampleBoxDark}><PaperNote title="Pinned Note">A warm paper surface for the inspector.</PaperNote></div>
+            <div className={styles.sampleBoxDark}><PaperNote title="Pinned Note">A warm paper surface for tooltips and notes.</PaperNote></div>
           </div>
           <div>
             <h3 className={styles.subheading}>Plank</h3>
             <div className={styles.plankStack}>
               <Plank>Signals found in the stream</Plank>
-              <Plank>Open a flagged token</Plank>
+              <Plank>Steer from a reading</Plank>
             </div>
           </div>
           <div>
@@ -144,7 +144,7 @@ export default function StyleguidePage() {
               <div className={styles.viewportContent}>
                 <Anglerfish />
                 <h3 className={styles.subheading}>Full-Screen Deep</h3>
-                <p>Feature nodes will glow here when the stream store and map arrive in Phase 2.</p>
+                <p>Feature nodes glow here as activations stream in.</p>
               </div>
             </DeepViewport>
           </div>
@@ -161,20 +161,20 @@ export default function StyleguidePage() {
 
       <section className={styles.section} aria-labelledby="map-title">
         <h2 className={styles.sectionTitle} id="map-title">Live Feature Map Preview</h2>
-        <p className={styles.sectionCopy}>This preview uses sample activations while the shared stream store is being built. Each dot represents a feature; brighter, larger dots mean stronger activation.</p>
+        <p className={styles.sectionCopy}>This preview uses sample activations. Each dot represents a feature; brighter, larger dots mean stronger activation.</p>
         <FeatureMapDemo />
       </section>
 
       <section className={styles.section} aria-labelledby="ui-title">
         <h2 className={styles.sectionTitle} id="ui-title">UI Primitives</h2>
-        <p className={styles.sectionCopy}>These are the shared shadcn primitives already in the repository. Samuel’s Phase 1 theme pass will restyle them.</p>
+        <p className={styles.sectionCopy}>These are the shared shadcn primitives in the repository.</p>
         <div className={styles.primitiveGrid}>
           <div className={styles.sampleBox}>
             <h3 className={styles.subheading}>Button</h3>
             <div className={styles.uiGroup}>
               <Button type="button" disabled>Run</Button>
               <Button type="button" variant="secondary" disabled>Rerun</Button>
-              <Button type="button" variant="outline" disabled>Compare</Button>
+              <Button type="button" variant="outline" disabled>Stop</Button>
               <Button type="button" variant="ghost" disabled>Reset</Button>
             </div>
           </div>

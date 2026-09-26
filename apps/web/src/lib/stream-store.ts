@@ -5,6 +5,7 @@ import {
   API_BASE,
   WS_URL,
   type AVAlternative,
+  type ClientMessage,
   type Coords,
   type Feature,
   type Model,
@@ -15,7 +16,7 @@ import {
 } from "@/lib/contract";
 import { codePointLength, codePointToUtf16 } from "@/lib/code-points";
 
-export type RunStatus = "streaming" | "done" | "error" | "stopped";
+type RunStatus = "streaming" | "done" | "error" | "stopped";
 export interface TokenEntry {
   index: number;
   text: string;
@@ -40,8 +41,6 @@ export interface Reading {
   position: number;
   label: string;
   focus: string | null;
-  detail: string;
-  genre: string;
   error?: string;
   alternatives?: AVAlternative[];
   selectedAlternative?: number;
@@ -103,7 +102,6 @@ interface StreamStore {
   paused: boolean;
   setPaused: (paused: boolean) => void;
   start: (prompt: string, model: Model) => void;
-  rerun: () => void;
   stop: () => void;
   hoverReading: (key: string | null) => void;
   setOpenReading: (key: string | null) => void;
@@ -156,7 +154,7 @@ let subscribers = 0;
 let pendingStart: { prompt: string; model: Model; run_id: string } | null =
   null;
 let socketEpoch = 0;
-const send = (message: object) => {
+const send = (message: ClientMessage) => {
   if (socket?.readyState === WebSocket.OPEN)
     socket.send(JSON.stringify(message));
 };
@@ -399,8 +397,6 @@ function handleMessage(message: ServerMessage) {
         position: message.position,
         label: message.label,
         focus: message.focus ?? null,
-        detail: message.detail || message.explanation,
-        genre: message.genre,
       }));
       break;
     case "av_error":
@@ -409,8 +405,6 @@ function handleMessage(message: ServerMessage) {
         position: message.position,
         label: message.label,
         focus: null,
-        detail: "",
-        genre: "",
         error: message.message,
       }));
       break;
@@ -633,10 +627,6 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
       send({ type: "start", ...pendingStart });
       pendingStart = null;
     } else if (!socket && subscribers) connect();
-  },
-  rerun() {
-    const run = get().runs.find((item) => item.id === get().activeRunId);
-    if (run) get().start(run.prompt, run.model);
   },
   stop() {
     pendingStart = null;

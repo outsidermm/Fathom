@@ -18,7 +18,4 @@
 .ramp span { width: 9px; height: 9px; border-radius: 50%; }
 .keys { display: flex; flex-wrap: wrap; gap: .45rem .8rem; margin-top: .45rem; }
 .keys > span { display: inline-flex; align-items: center; gap: .35rem; }
-.keys i { width: 12px; height: 12px; border: 2px solid; border-radius: 50%; }
-.up { color: var(--clamp-up, #c38300); }
-.down { color: var(--clamp-down, #8362cd); }
 .alert { color: var(--alert, #e84f27); }
