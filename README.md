@@ -1,7 +1,8 @@
 # Interpretability Observatory — HackGT 13, Oracle of the Deep
 
-Live Qwen answers now stream through the browser. The next step is to map
-sampled activations and let users steer and compare revised continuations.
+Live Qwen answers stream through the browser. The frontend has a canvas map,
+feature inspector, diagnostics, search, and run comparison ready for activation
+and steering events. Those events are still pending in the backend.
 
 ## Team
 
@@ -12,6 +13,8 @@ sampled activations and let users steer and compare revised continuations.
 
 See `AGENTS.md` for frontend AI-assistant guidelines and `docs/api-contract.md`
 for the interface both sides build against.
+Design: see [docs/design-system.md](docs/design-system.md). Samuel's frontend
+work follows the phases in [docs/frontend-roadmap.md](docs/frontend-roadmap.md).
 
 Repository owner and deployment documentation: [outsidermm](https://github.com/outsidermm).
 The NLA models and inference client are upstream work by
@@ -77,8 +80,9 @@ docker compose up -d
       Runpod Global volume; verify one AV random-vector smoke test
 - [ ] Validate AV on real Qwen layer-20 activations and AR reconstruction
 - [ ] Real activation hooks replacing placeholder `/api/features` data
-- [ ] Real three.js/D3 force-layout visualization replacing the placeholder
-      SVG scatter in `apps/web/src/components/observatory/observatory.tsx`
+- [x] Canvas feature map for planned activation events, with keyboard selection
+      and a frontend fixture verification of the full compare loop
+- [ ] Activation and steering integration against the live Qwen backend
 - [ ] Failure-signature flagging (hedging/refusal/unsupported) tuned against
       the real model instead of the mock's keyword heuristic
 - [ ] Demo framing + video

@@ -31,6 +31,7 @@ export type ServerMessage =
       feature_id: string;
       value: number; // 0..1
       coords: Coords;
+      explanation?: string;
     }
   | {
       type: "flag";
@@ -49,5 +50,10 @@ export interface Feature {
   description: string;
 }
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/stream";
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+export const WS_URL =
+  process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/stream";
+// Enable only for a backend that actually implements clamp/reset messages.
+export const STEERING_ENABLED =
+  process.env.NEXT_PUBLIC_STEERING_ENABLED === "true";
