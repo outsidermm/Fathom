@@ -11,10 +11,13 @@ and steering events. Those events are still pending in the backend.
 | Kareem + James | NLA vs. SAE decision, activation hooks, model integration, FastAPI/websocket backend |
 | Samuel + Hari | Next.js/shadcn frontend, live feature-map visualization |
 
-See `AGENTS.md` for frontend AI-assistant guidelines and `docs/api-contract.md`
-for the interface both sides build against.
-Design: see [docs/design-system.md](docs/design-system.md). Samuel's frontend
-work follows the phases in [docs/frontend-roadmap.md](docs/frontend-roadmap.md).
+See `AGENTS.md` for frontend AI-assistant guidelines, `docs/api-contract.md`
+for the interface both sides build against, and
+[`docs/deployment.md`](docs/deployment.md) for the hosted Vercel/Render/Runpod
+setup so the whole team (not just whoever has a tunnel open) can hit a live
+URL. Design: see [docs/design-system.md](docs/design-system.md). Samuel's
+frontend work follows the phases in
+[docs/frontend-roadmap.md](docs/frontend-roadmap.md).
 
 Repository owner and deployment documentation: [outsidermm](https://github.com/outsidermm).
 The NLA models and inference client are upstream work by
@@ -25,8 +28,9 @@ The NLA models and inference client are upstream work by
 ```
 apps/web/    Next.js + TypeScript + shadcn/ui frontend
 apps/api/    FastAPI backend — live Qwen text bridge; activation stream pending
-docs/        API contract, Runpod runbook, live orchestration design
-docker-compose.yml   Postgres
+docs/        API contract, Runpod runbook, deployment guide, orchestration design
+docker-compose.yml   Postgres (local dev)
+render.yaml  Render Blueprint — provisions the hosted API + Postgres
 ```
 
 ## Quick start
@@ -71,10 +75,22 @@ you're persisting):
 docker compose up -d
 ```
 
+## Deployed
+
+Once set up per [`docs/deployment.md`](docs/deployment.md), the team shares
+one live URL instead of everyone needing their own tunnel:
+
+- Frontend: Vercel (fill in once deployed)
+- API: Render (fill in once deployed)
+
 ## Status
 
 - [x] Repo scaffolded, frontend and backend build/typecheck clean
 - [x] Legacy WebSocket with a tested live Qwen text bridge
+- [x] Dockerfile + Render Blueprint + Vercel setup so the API/DB and
+      frontend deploy to shared URLs (`docs/deployment.md`)
+- [ ] Runpod reachable from the hosted API (currently a private tunnel;
+      James is bridging this — see `docs/deployment.md` §3)
 - [ ] Real activation events and steering in the current WebSocket contract
 - [x] Download Qwen2.5-7B-Instruct, NLA AV, and NLA AR checkpoints to the
       Runpod Global volume; verify one AV random-vector smoke test
