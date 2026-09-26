@@ -221,5 +221,61 @@ class SteerTests(unittest.TestCase):
                              [("steer_ack", False, expected)])
 
 
+
+LOOP = "**Tal?>>[This text seems to be cut off. I'll assume you meant " + "Tal ?>>[" * 30
+
+
+class LoopingBackends(FakeBackends):
+    """The sidecar loops under the first ``loops`` directions it is given."""
+
+    def __init__(self, loops: int) -> None:
+        super().__init__()
+        self.loops = loops
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path.rsplit("/", 1)[-1]
+        body = json.loads(request.content)
+        steered = [steer["direction_id"] for steer in body.get("steers", [])]
+        looping = path == "steer" and any(int(d[1:]) <= self.loops for d in steered)
+        if not looping:
+            return super().__call__(request)
+        self.requests.setdefault(path, []).append(body)
+        lines = [{"text": LOOP[i:i + 20]} for i in range(0, len(LOOP), 20)] + [{"done": True, "end_char": None}]
+        return httpx.Response(200, content="".join(json.dumps(line) + "\n" for line in lines))
+
+
+class LoopGuardTests(unittest.TestCase):
+    setUp = SteerTests.setUp
+    fake_av = SteerTests.fake_av
+    steer = SteerTests.steer
+
+    def test_degenerate_catches_loops_and_passes_normal_answers(self) -> None:
+        from app.steer import degenerate
+
+        self.assertTrue(degenerate(LOOP))
+        self.assertTrue(degenerate("### " + "and " * 40))
+        self.assertFalse(degenerate(STEERED))
+        self.assertFalse(degenerate("| Day | Plan |\n| --- | --- | --- | --- | --- | --- |\n| 1 | Walk the squares |"))
+        self.assertFalse(degenerate(ANSWER))
+
+    def test_a_looping_steer_is_redone_smaller_and_the_loop_is_never_sent(self) -> None:
+        backends = LoopingBackends(loops=1)
+        events, kept = self.steer(parent_run(), backends, checkpoint_id=0, alternative_id=0)
+        text = "".join(event["text"] for event in events if event["type"] == "token")
+        self.assertEqual(text, STEERED)
+        self.assertNotIn("Tal", text)
+        # The retry asked for the same direction at half size, and the run
+        # records the steer that actually made its text.
+        self.assertEqual(backends.requests["contrast"][1].get("scale"), 0.5)
+        self.assertEqual(kept[0].steers[-1]["direction_id"], "d2")
+
+    def test_when_every_size_loops_the_section_is_written_without_the_new_steer(self) -> None:
+        backends = LoopingBackends(loops=99)
+        events, kept = self.steer(parent_run(), backends, checkpoint_id=0, alternative_id=0)
+        text = "".join(event["text"] for event in events if event["type"] == "token")
+        self.assertNotIn("Tal", text)
+        self.assertEqual(kept[0].steers, [])
+
+
 if __name__ == "__main__":
     unittest.main()
