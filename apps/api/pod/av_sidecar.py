@@ -72,13 +72,20 @@ async def require_key(request: Request, call_next):
 
 class ExplainRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=16000)
-    answer: str = Field(min_length=1, max_length=16000)
+    # Empty reads the end of the prompt: the state just before the first answer token.
+    answer: str = Field(max_length=16000)
+    # With an empty answer, read this many tokens before the prompt's last one.
+    prompt_end_back: int = Field(default=0, ge=0, le=4)
+    # Sample the final token even if it has no letters or digits (e.g. "**").
+    last_token: bool = False
+    # AV decoding temperature; above 0 draws a sample instead of the greedy reading.
+    temperature: float = Field(default=0.0, ge=0.0, le=1.5)
 
 
 class ExplainResponse(BaseModel):
     explanation: str
     layer: int = LAYER
-    sample: str = "replayed_last_content_token"
+    sample: str = "replayed_last_content_token"  # or "prompt_end" for an empty answer
     replay_ms: int
     av_ms: int
 
@@ -113,9 +120,9 @@ def explain(request: ExplainRequest):
             add_generation_prompt=True,
         )
         answer_ids = tokenizer.encode(request.answer, add_special_tokens=False)
-        if not answer_ids:
-            raise ValueError("Answer contains no tokens")
-        sample_answer_index = next(
+        if not answer_ids and request.prompt_end_back:
+            prompt_ids = prompt_ids[: -request.prompt_end_back]
+        sample_answer_index = len(answer_ids) - 1 if request.last_token else next(
             (
                 i for i in range(len(answer_ids) - 1, -1, -1)
                 if any(char.isalnum() for char in tokenizer.decode([answer_ids[i]]))
@@ -133,11 +140,14 @@ def explain(request: ExplainRequest):
                 input_ids=input_ids, output_hidden_states=True, use_cache=False
             ).hidden_states[LAYER + 1][0, -1].float().cpu()
         replayed = time.perf_counter()
-        text = _clean(av.generate(state, temperature=0, max_new_tokens=AV_MAX_TOKENS))
+        text = _clean(av.generate(
+            state, temperature=request.temperature, max_new_tokens=AV_MAX_TOKENS
+        ))
         if not text:
             raise ValueError("AV returned an empty explanation")
         return ExplainResponse(
             explanation=text,
+            sample="replayed_last_content_token" if answer_ids else "prompt_end",
             replay_ms=round((replayed - started) * 1000),
             av_ms=round((time.perf_counter() - replayed) * 1000),
         )
