@@ -89,6 +89,10 @@ class AVEvent(BaseModel):
     checkpoint_id: int = Field(ge=0)
     position: int = Field(ge=0)
     label: str
+    # First sentence (mostly the AV's generic prior) and the rest, which
+    # carries most of the signal: show the detail first.
+    genre: str = ""
+    detail: str = ""
     replay_ms: Optional[int] = None
     av_ms: Optional[int] = None
 
