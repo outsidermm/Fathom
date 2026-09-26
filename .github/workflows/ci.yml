@@ -52,7 +52,7 @@ jobs:
         run: npm ci
       - name: ESLint
         run: npm run lint
-      - name: Markdown tests
-        run: npm run test:markdown
+      - name: Unit tests
+        run: npm run test
       - name: Production build
         run: npm run build
