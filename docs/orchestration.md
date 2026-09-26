@@ -1,9 +1,10 @@
 # Live inference and orchestration design
 
-This is the **planned integration**, not a description of the current
-implementation. Today `apps/api/app/main.py` relays real Qwen answer text
-through the current WebSocket, while `/api/features` still serves placeholder
-feature data. The [target harness contract](target-harness-contract.md)
+This is the **planned full integration**, beyond the current replay experiment.
+Today `apps/api/app/main.py` relays real Qwen answer text and queues a few
+replayed AV checkpoints through the current WebSocket. `/api/features` still
+serves placeholder feature data; original-generation activation hooks, AR,
+and steering are not connected. The [target harness contract](target-harness-contract.md)
 describes a possible **post-hackathon** conversation protocol. For this
 weekend's activation-stream contract and frontend plan, see
 [api-contract.md](api-contract.md) and [frontend-roadmap.md](frontend-roadmap.md).
