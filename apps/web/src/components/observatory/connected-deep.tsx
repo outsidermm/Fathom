@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { activationBus, useStreamStore, type ActivationEntry, type FlagEntry, type TokenEntry } from "@/lib/stream-store";
-import type { Feature } from "@/lib/contract";
+import { MODEL_LABELS, type Feature, type Model } from "@/lib/contract";
 import { FeatureMap } from "./feature-map/feature-map";
 import type { MapFeature, MapFlag } from "./feature-map/fake-activation-bus";
 import { TEST_FEATURES, TEST_RUN_ID, testActivationSource } from "./feature-map/test-feature-layout";
@@ -63,7 +63,7 @@ function useTestLayoutFlag() {
   );
 }
 
-function TestFeatureMap({ paused }: { paused: boolean }) {
+function TestFeatureMap({ paused, model }: { paused: boolean; model: Model }) {
   const [flags, setFlags] = useState<readonly MapFlag[]>(EMPTY_FLAGS);
   useEffect(() => {
     const unsubscribe = testActivationSource.onFlags(setFlags);
@@ -73,18 +73,18 @@ function TestFeatureMap({ paused }: { paused: boolean }) {
   return <div data-coach-target="map" className={styles.host}>
     <p className={styles.testBadge} role="note">Test layout · {TEST_FEATURES.length} fake positions, not from Qwen</p>
     <div className={styles.live}>
-      <FeatureMap features={TEST_FEATURES} source={testActivationSource} activeRunId={TEST_RUN_ID}
+      <FeatureMap features={TEST_FEATURES} source={testActivationSource} activeRunId={TEST_RUN_ID} modelLabel={MODEL_LABELS[model]}
         ambientPaused={paused} flags={flags} className="min-h-[350px] rounded-[20px]" />
     </div>
   </div>;
 }
 
-export function ConnectedFeatureMap({ paused }: { paused: boolean }) {
+export function ConnectedFeatureMap({ paused, model }: { paused: boolean; model: Model }) {
   const testLayout = useTestLayoutFlag();
-  return testLayout ? <TestFeatureMap paused={paused} /> : <LiveFeatureMap paused={paused} />;
+  return testLayout ? <TestFeatureMap paused={paused} model={model} /> : <LiveFeatureMap paused={paused} model={model} />;
 }
 
-function LiveFeatureMap({ paused }: { paused: boolean }) {
+function LiveFeatureMap({ paused, model }: { paused: boolean; model: Model }) {
   const features = usePositionedFeatures();
   const runId = useStreamStore((state) => state.activeRunId);
   const selected = useStreamStore((state) => state.selectedFeatureId);
@@ -126,7 +126,7 @@ function LiveFeatureMap({ paused }: { paused: boolean }) {
 
   return <div ref={host} data-coach-target="map" className={`${styles.host} ${paused ? styles.paused : ""}`}>
     <div data-live-map inert={paused} className={styles.live}>
-      <FeatureMap features={features} source={activationBus} activeRunId={runId} ambientPaused={paused}
+      <FeatureMap features={features} source={activationBus} activeRunId={runId} ambientPaused={paused} modelLabel={MODEL_LABELS[model]}
         selectedFeatureId={selected} onSelectFeature={select} clamps={clamps}
         hoveredTokenIndex={hoveredToken} flags={flags} className="min-h-[350px] rounded-[20px]" />
     </div>

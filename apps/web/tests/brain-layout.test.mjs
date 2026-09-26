@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BRAIN_REGIONS, layoutBrain, regionContains } from '../src/components/observatory/feature-map/brain-layout.ts';
+import { BRAIN_REGIONS, FISH_PLACEMENT, layoutBrain, regionContains, taperAt } from '../src/components/observatory/feature-map/brain-layout.ts';
+import { bodyAt } from '../src/components/sea/sea-models.ts';
 import { TEST_FEATURES } from '../src/components/observatory/feature-map/test-feature-layout.ts';
 
 const volume = (region) => region.radius.x * region.radius.y * region.radius.z * (1 - region.taper / 2);
@@ -101,4 +102,45 @@ test('missing z, single-neuron and empty inputs do not break the layout', () => 
   assertEveryNeuronHome(one, layout);
   assert.ok(Object.values(layout.positions.get('a')).every(Number.isFinite));
   assert.deepEqual(layoutBrain([]).labels.filter(Boolean), []);
+});
+
+test('the whole brain sits inside the glass fish with room to spare', () => {
+  const { from, lift, lateral, scale, toWorld } = FISH_PLACEMENT;
+  const brainTail = toWorld(from, 0, 0).x;
+  let worst = 0, worstAt = '';
+  for (const region of BRAIN_REGIONS) {
+    for (let i = 0; i < 600; i += 1) {
+      // Points spread over the lobe's surface.
+      const a = i * 2.399, b = Math.acos(1 - 2 * (i + 0.5) / 600);
+      const lx = Math.cos(a) * Math.sin(b);
+      const world = {
+        x: region.center.x + lx * region.radius.x,
+        y: region.center.y + Math.cos(b) * region.radius.y,
+        z: region.center.z + Math.sin(a) * Math.sin(b) * region.radius.z * taperAt(region, lx),
+      };
+      // World → fish units, then compare against the body's cross-section there.
+      const x = from + (world.x - brainTail) / scale, y = world.y / scale + lift, z = world.z / (scale * lateral);
+      const { h, w, cy } = bodyAt(x, 1);
+      const reach = ((y - cy) / (y < cy ? h * 0.92 : h)) ** 2 + (z / w) ** 2;
+      if (reach > worst) { worst = reach; worstAt = region.name; }
+    }
+  }
+  assert.ok(worst < 0.8, `${worstAt} reaches ${Math.sqrt(worst).toFixed(2)} of the body radius`);
+});
+
+test('the fish eyes stay clear of every lobe, even seen from straight above', () => {
+  // Checking each eye point at the lobe's own mid-height tests the top-down
+  // footprint, which also rules out any overlap in 3D.
+  const { eye, scale, toWorld } = FISH_PLACEMENT;
+  const radius = eye.radius * scale;
+  for (const side of [-1, 1]) {
+    const center = toWorld(eye.x, eye.y, side * eye.z);
+    for (let i = 0; i < 800; i += 1) {
+      const a = i * 2.399, b = Math.acos(1 - 2 * (i + 0.5) / 800), r = radius * Math.cbrt(((i * 7) % 800 + 1) / 800);
+      const x = center.x + r * Math.cos(a) * Math.sin(b), z = center.z + r * Math.sin(a) * Math.sin(b);
+      for (const region of BRAIN_REGIONS) {
+        assert.ok(!regionContains(region, { x, y: region.center.y, z }), `eye (${side}) covers ${region.name} from above`);
+      }
+    }
+  }
 });

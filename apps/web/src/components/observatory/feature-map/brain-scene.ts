@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { BRAIN_BOUNDS, BRAIN_REGIONS, taperAt, type Vec3 } from "./brain-layout";
+import { createFishGeometry } from "@/components/sea/sea-models";
+import { readSeaPalette } from "@/components/sea/sea-renderer";
+import { BRAIN_BOUNDS, BRAIN_REGIONS, FISH_PLACEMENT, taperAt, type Vec3 } from "./brain-layout";
 
 export interface NeuronState {
   /** Activation strength 0..1. */
@@ -15,7 +17,9 @@ export interface BrainScene {
   canvas: HTMLCanvasElement;
   setNeurons(neurons: readonly { id: string; position: Vec3 }[]): void;
   /** Advances the camera, applies neuron states and renders one frame. */
-  frame(delta: number, autoRotate: boolean, stateOf: (id: string) => NeuronState): void;
+  frame(delta: number, autoRotate: boolean, stateOf: (id: string) => NeuronState, zoom: { brain: boolean; instant: boolean }): void;
+  /** 0 = whole fish in view, 1 = zoomed in on the brain (eases between). */
+  zoomAmount(): number;
   /** Screen position in CSS px relative to the host, or null when off-screen. */
   project(point: Vec3): { x: number; y: number } | null;
   resize(width: number, height: number): void;
@@ -25,8 +29,9 @@ export interface BrainScene {
 const AXON_POINTS = 24;
 const DENDRITES = 3;
 const DENDRITE_POINTS = 7;
+// Fixed camera tilt, in degrees from straight overhead.
+const CAMERA_TILT = 66;
 const VERTICES_PER_NEURON = (AXON_POINTS - 1) * 2 + DENDRITES * (DENDRITE_POINTS - 1) * 2;
-const TARGET = new THREE.Vector3(BRAIN_BOUNDS.center.x, 0, 0);
 
 function mulberry32(seed: number) {
   return () => {
@@ -61,20 +66,26 @@ export function createBrainScene(host: HTMLElement, controlsElement: HTMLElement
   host.prepend(canvas);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-  // Start looking down from behind the tail, nose towards the top of the screen.
-  camera.position.set(-11, 17, 0).add(TARGET);
+  const fish = createGlassFish(host);
+  scene.add(fish.root);
+  // Frame the whole fish; start above and to one side so the brain and the
+  // fish's profile both read.
+  const bounds = new THREE.Box3().setFromObject(fish.root).getBoundingSphere(new THREE.Sphere());
+  const brainBounds = new THREE.Sphere(new THREE.Vector3(BRAIN_BOUNDS.center.x, 0, 0), BRAIN_BOUNDS.radius);
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 400);
+  camera.position.setFromSphericalCoords(1, THREE.MathUtils.degToRad(CAMERA_TILT), Math.atan2(0.3, 0.9)).add(bounds.center);
   const controls = new OrbitControls(camera, controlsElement);
-  controls.target.copy(TARGET);
+  controls.target.copy(bounds.center);
   controls.enableZoom = false;
   controls.enablePan = false;
   controls.enableDamping = true;
   controls.autoRotateSpeed = 0.6;
-  controls.minPolarAngle = 0.3;
-  controls.maxPolarAngle = 1.2;
   // Horizontal drags orbit; vertical swipes still scroll the page on touch.
   controlsElement.style.touchAction = "pan-y";
   controls.update();
+  // The tilt is fixed so the view stays predictable: dragging only turns the
+  // fish around, never over or under it.
+  controls.minPolarAngle = controls.maxPolarAngle = THREE.MathUtils.degToRad(CAMERA_TILT);
 
   const inkColor = new THREE.Color(ink);
   const ramp = glowColors.map((color) => new THREE.Color(color));
@@ -239,9 +250,22 @@ export function createBrainScene(host: HTMLElement, controlsElement: HTMLElement
   // Resting fibers take the second glow step, so the network reads teal, not white.
   const fiberBase = ramp[Math.min(1, ramp.length - 1)].clone();
 
-  function frame(delta: number, autoRotate: boolean, stateOf: (id: string) => NeuronState) {
+  // Zoom eases the camera from framing the fish to framing the brain, and
+  // fades the fish out to a faint outline.
+  let zoom = 0;
+  const lastTarget = new THREE.Vector3();
+  function frame(delta: number, autoRotate: boolean, stateOf: (id: string) => NeuronState, zoomTo: { brain: boolean; instant: boolean }) {
+    const goal = zoomTo.brain ? 1 : 0;
+    const nextZoom = zoomTo.instant ? goal : zoom + (goal - zoom) * (1 - Math.exp(-delta * 5));
+    zoom = Math.abs(goal - nextZoom) < 0.001 ? goal : nextZoom;
+    lastTarget.copy(controls.target);
+    controls.target.lerpVectors(bounds.center, brainBounds.center, zoom);
+    const distance = THREE.MathUtils.lerp(fitDistance(bounds.radius), fitDistance(brainBounds.radius), zoom);
+    camera.position.sub(lastTarget).setLength(distance).add(controls.target);
+    fish.setFade(1 - zoom * 0.9);
     controls.autoRotate = autoRotate;
     controls.update(delta);
+    if (autoRotate) fish.swim(delta);
     if (somas && halos && fibers) {
       const haloColors = halos.geometry.getAttribute("aColor") as THREE.BufferAttribute;
       const haloSizes = halos.geometry.getAttribute("aSize") as THREE.BufferAttribute;
@@ -287,6 +311,13 @@ export function createBrainScene(host: HTMLElement, controlsElement: HTMLElement
     return { x: (projected.x + 1) / 2 * width, y: (1 - projected.y) / 2 * height };
   }
 
+  /** Camera distance that keeps a sphere of `radius` in frame at the current aspect. */
+  function fitDistance(radius: number) {
+    const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
+    const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
+    return radius / Math.sin(Math.min(vertical, horizontal));
+  }
+
   function resize(nextWidth: number, nextHeight: number) {
     width = Math.max(1, nextWidth);
     height = Math.max(1, nextHeight);
@@ -294,8 +325,7 @@ export function createBrainScene(host: HTMLElement, controlsElement: HTMLElement
     camera.aspect = width / height;
     // Keep the whole brain in frame at any aspect, whichever way it has turned.
     const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
-    const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
-    const distance = BRAIN_BOUNDS.radius / Math.sin(Math.min(vertical, horizontal));
+    const distance = THREE.MathUtils.lerp(fitDistance(bounds.radius), fitDistance(brainBounds.radius), zoom);
     camera.position.sub(controls.target).setLength(distance).add(controls.target);
     camera.updateProjectionMatrix();
     haloMaterial.uniforms.uScale.value = (height * renderer.getPixelRatio()) / (2 * Math.tan(vertical));
@@ -303,12 +333,14 @@ export function createBrainScene(host: HTMLElement, controlsElement: HTMLElement
 
   return {
     canvas,
+    zoomAmount: () => zoom,
     setNeurons,
     frame,
     project,
     resize,
     dispose() {
       controls.dispose();
+      fish.dispose();
       disposeNeurons();
       for (const shell of shells) shell.geometry.dispose();
       shellMaterial.dispose();
@@ -319,6 +351,93 @@ export function createBrainScene(host: HTMLElement, controlsElement: HTMLElement
       renderer.dispose();
       renderer.forceContextLoss();
       canvas.remove();
+    },
+  };
+}
+
+/**
+ * The sea-glass reef fish from the sea scene, rebuilt as clear glass around
+ * the brain: bright at its silhouette, nearly invisible face-on, with solid
+ * eyes. It keeps the sea fish's travelling-wave swim (tail only, so the brain
+ * in its head stays still).
+ */
+function createGlassFish(host: HTMLElement) {
+  const palette = readSeaPalette(host);
+  const geometry = createFishGeometry(palette, 0);
+  const swim = { uSwim: { value: 0 }, uAmp: { value: 0.07 } };
+  const fade = { value: 1 };
+  const glass = (color: THREE.Color, base: number, rim: number, side: THREE.Side) => new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: color }, uBase: { value: base }, uRim: { value: rim }, uFade: fade, ...swim },
+    vertexShader: `
+      uniform float uSwim; uniform float uAmp;
+      varying vec3 vNormal; varying vec3 vView;
+      void main() {
+        // Same body wave as the sea fish (sea-models.ts), in fish units.
+        float swimT = clamp((0.45 - position.x) * 0.5, 0.0, 1.0);
+        vec3 bent = position;
+        bent.z += uAmp * swimT * swimT * sin(uSwim + position.x * 3.2);
+        vec4 mv = modelViewMatrix * vec4(bent, 1.0);
+        vNormal = normalize(normalMatrix * normal);
+        vView = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uBase; uniform float uRim; uniform float uFade;
+      varying vec3 vNormal; varying vec3 vView;
+      void main() {
+        float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.0);
+        gl_FragColor = vec4(uColor, (uBase + rim * uRim) * uFade);
+        #include <colorspace_fragment>
+      }`,
+    transparent: true,
+    depthWrite: false,
+    side,
+    blending: THREE.AdditiveBlending,
+  });
+  const bodyMaterial = glass(palette.seaGlass.clone(), 0.02, 0.55, THREE.FrontSide);
+  const finMaterial = glass(palette.seaGlass.clone().lerp(palette.water, 0.3), 0.05, 0.3, THREE.DoubleSide);
+
+  const root = new THREE.Group();
+  root.position.set(FISH_PLACEMENT.offset.x, FISH_PLACEMENT.offset.y, FISH_PLACEMENT.offset.z);
+  root.scale.set(FISH_PLACEMENT.scale, FISH_PLACEMENT.scale, FISH_PLACEMENT.scale * FISH_PLACEMENT.lateral);
+  root.add(new THREE.Mesh(geometry.body, bodyMaterial), new THREE.Mesh(geometry.fins, finMaterial), new THREE.Mesh(geometry.gill, finMaterial));
+  for (const side of [-1, 1]) {
+    const pectoral = new THREE.Mesh(geometry.pectoral, finMaterial);
+    pectoral.position.copy(geometry.pectoralAt).setZ(side * geometry.pectoralAt.z);
+    pectoral.rotation.y = side * 0.55;
+    root.add(pectoral);
+  }
+  // Solid eyes give the glass body a face. They live in world space, outside
+  // the widened body, so they stay round and clear of the brain.
+  const eyeMaterial = new THREE.MeshStandardMaterial({ color: palette.paper, roughness: 0.3, transparent: true, opacity: 0.55 });
+  const pupilMaterial = new THREE.MeshStandardMaterial({ color: 0x020608, roughness: 0.1, transparent: true });
+  const eyeRadius = FISH_PLACEMENT.eye.radius * FISH_PLACEMENT.scale;
+  const eyeballGeometry = new THREE.SphereGeometry(eyeRadius, 24, 16);
+  const pupilGeometry = new THREE.SphereGeometry(eyeRadius * 0.68, 20, 14);
+  const eyes = new THREE.Group();
+  for (const side of [-1, 1]) {
+    const center = FISH_PLACEMENT.toWorld(FISH_PLACEMENT.eye.x, FISH_PLACEMENT.eye.y, side * FISH_PLACEMENT.eye.z);
+    const eyeball = new THREE.Mesh(eyeballGeometry, eyeMaterial);
+    eyeball.position.set(center.x, center.y, center.z);
+    const pupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+    pupil.position.set(center.x + eyeRadius * 0.15, center.y, center.z + side * eyeRadius * 0.47);
+    eyes.add(eyeball, pupil);
+  }
+  const group = new THREE.Group();
+  group.add(root, eyes);
+  group.traverse((object) => { object.renderOrder = -1; });
+
+  return {
+    root: group,
+    swim(delta: number) { swim.uSwim.value += delta * 3; },
+    setFade(amount: number) {
+      fade.value = amount;
+      eyeMaterial.opacity = 0.55 * amount;
+      pupilMaterial.opacity = amount;
+    },
+    dispose() {
+      for (const part of [geometry.body, geometry.fins, geometry.pectoral, geometry.gill, geometry.eyeball, geometry.pupil, eyeballGeometry, pupilGeometry]) part.dispose();
+      for (const material of [bodyMaterial, finMaterial, eyeMaterial, pupilMaterial]) material.dispose();
     },
   };
 }

@@ -54,6 +54,36 @@ export const BRAIN_BOUNDS = (() => {
   return { center, length: maxX - minX, width: maxZ * 2, radius };
 })();
 
+/**
+ * How the brain sits inside the glass fish, in fish units (tail −0.98 → nose
+ * 1). The brain runs from behind mid-body (`from`: the tapering hindbrain
+ * doubles as the spinal cord) to just behind the snout (`to`), a little above
+ * the body's centre line (`lift`). The brain is drawn larger than a real
+ * fish's so its lobes stay readable, and the fish `lateral` times wider than
+ * the reef fish in the sea so the optic tectum fits. tests/brain-layout.test.mjs
+ * checks that every lobe stays inside the body.
+ */
+export const FISH_PLACEMENT = (() => {
+  const from = -0.5, to = 0.9, lift = 0.03, lateral = 1.6;
+  const scale = BRAIN_BOUNDS.length / (to - from);
+  const brainTail = BRAIN_BOUNDS.center.x - BRAIN_BOUNDS.length / 2;
+  return {
+    from, to, lift, lateral, scale,
+    /**
+     * Eyes, in fish units, on the head's surface beside the telencephalon.
+     * They are round spheres (not stretched with the body) and sit clear of
+     * every lobe; tests/brain-layout.test.mjs checks it.
+     */
+    eye: { x: 0.74, y: 0.065, z: 0.14, radius: 0.055 },
+    /** World position of the fish's origin. */
+    offset: { x: brainTail - from * scale, y: -lift * scale, z: 0 },
+    /** Fish-space point → world (brain) space. */
+    toWorld: (x: number, y: number, z: number): Vec3 => ({
+      x: brainTail + (x - from) * scale, y: (y - lift) * scale, z: z * scale * lateral,
+    }),
+  };
+})();
+
 // Neurons are spread over this share of their region, clear of the surface.
 const FILL = 0.78;
 

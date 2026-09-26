@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Model } from "@/lib/contract";
+import { MODEL_LABELS, type Model } from "@/lib/contract";
 
 export function TopBar({
   model,
@@ -52,9 +52,9 @@ export function TopBar({
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper" align="end" sideOffset={8}>
-              <SelectItem value="qwen2.5-7b">Qwen 2.5 7B</SelectItem>
+              <SelectItem value="qwen2.5-7b">{MODEL_LABELS["qwen2.5-7b"]}</SelectItem>
               <SelectItem value="gemma-2b" disabled>
-                Gemma 2B (unavailable)
+                {MODEL_LABELS["gemma-2b"]} (unavailable)
               </SelectItem>
             </SelectContent>
           </Select>

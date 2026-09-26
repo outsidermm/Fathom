@@ -6,6 +6,7 @@
 // Reserved value shared with the disabled model-select option. The backend
 // explicitly rejects it; only qwen2.5-7b can start a generation.
 export type Model = "gemma-2b" | "qwen2.5-7b";
+export const MODEL_LABELS: Record<Model, string> = { "qwen2.5-7b": "Qwen 2.5 7B", "gemma-2b": "Gemma 2B" };
 export type Signature = "hedging" | "refusal" | "unsupported";
 export type StreamState = "idle" | "streaming" | "inspecting" | "done" | "error";
 

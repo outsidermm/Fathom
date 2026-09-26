@@ -43,7 +43,7 @@ export function Observatory() {
         </div>
         <div className="grid min-h-[560px] flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
           <div className="grid content-start grid-rows-[auto_auto_auto] gap-4">
-            <ConnectedFeatureMap paused={motionPaused} />
+            <ConnectedFeatureMap paused={motionPaused} model={model} />
             <TokenStream />
             <AvReadings />
           </div>

@@ -76,7 +76,8 @@ const BODY = profileSampler([
 ]);
 const TAIL_X = -.98, NOSE_X = 1;
 
-function bodyAt(x: number, height: number) {
+/** Half height, half width and centre line of the fish body at `x` (tail −0.98 → nose 1). */
+export function bodyAt(x: number, height: number) {
   const [, h, w, cy] = BODY(x);
   return { h: h * height, w, cy: cy * height };
 }

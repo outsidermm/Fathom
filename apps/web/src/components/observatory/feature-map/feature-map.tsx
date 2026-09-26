@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { ZoomIn, ZoomOut } from "lucide-react";
 
 import { Legend } from "@/components/observatory/legend";
 import { DeepViewport } from "@/components/sea/deep-viewport";
@@ -44,6 +45,8 @@ export interface FeatureMapProps {
   flags?: readonly MapFlag[];
   className?: string;
   ambientPaused?: boolean;
+  /** Display name of the active model, written on the glass fish's body. */
+  modelLabel?: string;
 }
 
 function FeatureMapInner({
@@ -57,6 +60,7 @@ function FeatureMapInner({
   flags = EMPTY_FLAGS,
   className = "",
   ambientPaused = false,
+  modelLabel,
 }: FeatureMapProps) {
   const instructionsId = useId();
   const tooltipId = useId();
@@ -72,13 +76,34 @@ function FeatureMapInner({
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [keyboardId, setKeyboardId] = useState<string | null>(null);
   const selection = selectedFeatureId === undefined ? localSelection : selectedFeatureId;
-  const tooltipFeature = features.find((feature) => feature.id === (hoveredId ?? keyboardId));
+  // The name tooltip follows keyboard focus only: on hover it got in the way of dragging.
+  const tooltipFeature = features.find((feature) => feature.id === keyboardId);
   const presentationRef = useRef({ selection, keyboardId, hoveredId, clamps, tokenFeatures: null as Set<string> | null });
   const motionPausedRef = useRef(ambientPaused);
   // Last pointer position over the map; neurons move under a still pointer as the brain turns.
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
 
+  const modelLabelRef = useRef(modelLabel);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const [brainZoomed, setBrainZoomed] = useState(false);
+  const brainZoomedRef = useRef(brainZoomed);
+  const [has3d, setHas3d] = useState(false);
+
+  useEffect(() => { brainZoomedRef.current = brainZoomed; }, [brainZoomed]);
+
+  // The zoom button matches the legend's height (it wraps on narrow screens).
+  useEffect(() => {
+    const map = mapRef.current;
+    const legend = map?.querySelector("aside");
+    if (!map || !legend) return;
+    const observer = new ResizeObserver(() => map.style.setProperty("--legend-height", `${legend.getBoundingClientRect().height}px`));
+    observer.observe(legend);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => { motionPausedRef.current = ambientPaused; }, [ambientPaused]);
+  useEffect(() => { modelLabelRef.current = modelLabel; }, [modelLabel]);
 
   // React handles interaction changes; the activation stream only updates refs.
   useEffect(() => {
@@ -87,7 +112,7 @@ function FeatureMapInner({
       tokenFeatures: activeRunId && hoveredTokenIndex !== null
         ? new Set(source.forToken(activeRunId, hoveredTokenIndex).map((entry) => entry.featureId)) : null,
     };
-    const point = screenPositionsRef.current.get(hoveredId ?? keyboardId ?? "");
+    const point = screenPositionsRef.current.get(keyboardId ?? "");
     if (point && canvasRef.current && tooltipRef.current) {
       tooltipRef.current.style.left = `${Math.max(8, Math.min(canvasRef.current.clientWidth - 228, point.x + 18))}px`;
       tooltipRef.current.style.top = `${Math.max(76, point.y - 100)}px`;
@@ -171,6 +196,7 @@ function FeatureMapInner({
           scene3d = createBrainScene(host, canvas, glowColors, deepInk);
           scene3d.setNeurons([...positions].map(([id, position]) => ({ id, position })));
           scene3d.resize(width, height);
+          setHas3d(true);
         } catch {
           scene3d = null;
         }
@@ -188,7 +214,7 @@ function FeatureMapInner({
         if (button) { button.style.display = ""; button.style.left = `${screen.x}px`; button.style.top = `${screen.y}px`; }
       }
       const ui = presentationRef.current;
-      const point = projected.get(ui.hoveredId ?? ui.keyboardId ?? "");
+      const point = projected.get(ui.keyboardId ?? "");
       if (point && tooltipRef.current) {
         tooltipRef.current.style.left = `${Math.max(8, Math.min(width - 228, point.x + 18))}px`;
         tooltipRef.current.style.top = `${Math.max(76, point.y - 100)}px`;
@@ -270,9 +296,11 @@ function FeatureMapInner({
         }
         while (state.pulses.length && timestamp - state.pulses[0].startedAt > SIGNAL_MS) state.pulses.shift();
       }
-      scene3d?.frame(elapsed / 1000, !reducedMotion && !motionPausedRef.current, neuronState);
+      scene3d?.frame(elapsed / 1000, !reducedMotion && !motionPausedRef.current, neuronState,
+        { brain: brainZoomedRef.current, instant: reducedMotion });
       updateScreenPositions();
-      const nearest = pointerRef.current ? nearestNeuron(screenPositionsRef.current, pointerRef.current) : null;
+      // No hover while dragging the fish around.
+      const nearest = pointerRef.current && !draggingRef.current ? nearestNeuron(screenPositionsRef.current, pointerRef.current) : null;
       if (nearest !== presentationRef.current.hoveredId) setHoveredId(nearest);
 
       context.clearRect(0, 0, width, height);
@@ -300,18 +328,33 @@ function FeatureMapInner({
           context.setLineDash([]);
         }
       }
-      // Region labels draw above every neuron, with a dark halo so they never lose contrast.
-      context.font = `16px ${displayFont}`;
       context.textAlign = "center";
       context.lineJoin = "round";
-      for (const anchor of labelAnchors) {
+      // Zoomed out, the model's name sits at the centre of the brain; zoomed in,
+      // it crossfades to the name of each region. Without the 3D scene, only
+      // region names show.
+      const zoom = scene3d ? scene3d.zoomAmount() : 1;
+      const brainPoint = scene3d && modelLabelRef.current && zoom < 0.99 ? scene3d.project(BRAIN_BOUNDS.center) : null;
+      if (brainPoint && modelLabelRef.current) {
+        context.font = `24px ${displayFont}`;
+        context.globalAlpha = .8 * (1 - zoom);
+        context.strokeStyle = abyss;
+        context.lineWidth = 6;
+        context.strokeText(modelLabelRef.current, brainPoint.x, brainPoint.y + 8);
+        context.globalAlpha = .92 * (1 - zoom);
+        context.fillStyle = deepInk;
+        context.fillText(modelLabelRef.current, brainPoint.x, brainPoint.y + 8);
+      }
+      // Region labels draw above every neuron, with a dark halo so they never lose contrast.
+      context.font = `16px ${displayFont}`;
+      for (const anchor of zoom > 0.01 ? labelAnchors : []) {
         const point = projectPoint(anchor.center);
         if (!point) continue;
-        context.globalAlpha = .85;
+        context.globalAlpha = .85 * zoom;
         context.strokeStyle = abyss;
         context.lineWidth = 5;
         context.strokeText(anchor.label, point.x, point.y + 5);
-        context.globalAlpha = 1;
+        context.globalAlpha = zoom;
         context.fillStyle = deepInk;
         context.fillText(anchor.label, point.x, point.y + 5);
       }
@@ -326,7 +369,7 @@ function FeatureMapInner({
         ring(point.x, point.y, reducedMotion ? 20 : 12 * (1 + 2 * progress), alert, 2);
       }
       context.globalAlpha = 1;
-      const tipState = states.get(ui.hoveredId ?? ui.keyboardId ?? "");
+      const tipState = states.get(ui.keyboardId ?? "");
       if (tooltipValueRef.current) tooltipValueRef.current.textContent = (tipState?.glow ?? 0).toFixed(2);
       frameId = requestAnimationFrame(draw);
     }
@@ -382,7 +425,21 @@ function FeatureMapInner({
 
   return (
     <DeepViewport className={className} paused={ambientPaused} receded={features.length > 0}>
-      <div className={styles.map} onPointerMove={pointerMove} onPointerLeave={() => { pointerRef.current = null; setHoveredId(null); }}>
+      <div ref={mapRef} className={`${styles.map} ${has3d ? styles.withZoom : ""}`} onPointerMove={pointerMove}
+        onPointerDown={() => {
+          draggingRef.current = true;
+          setHoveredId(null);
+          mapRef.current?.setAttribute("data-dragging", "");
+          const end = () => {
+            draggingRef.current = false;
+            mapRef.current?.removeAttribute("data-dragging");
+            window.removeEventListener("pointerup", end);
+            window.removeEventListener("pointercancel", end);
+          };
+          window.addEventListener("pointerup", end);
+          window.addEventListener("pointercancel", end);
+        }}
+        onPointerLeave={() => { pointerRef.current = null; setHoveredId(null); }}>
         <canvas
           data-feature-map
           ref={canvasRef}
@@ -392,7 +449,8 @@ function FeatureMapInner({
           aria-label={`Feature map: ${features.length} features shown as neurons in a fish brain. ${tooltipFeature ? `Focused feature: ${tooltipFeature.label}.` : "Neurons brighten when a feature activates."}`}
           aria-describedby={instructionsId}
           onKeyDown={keyDown}
-          onFocus={() => setKeyboardId(selection ?? features[0]?.id ?? null)}
+          // Clicking to drag also focuses the canvas; only keyboard focus picks a feature.
+          onFocus={(event) => { if (event.currentTarget.matches(":focus-visible")) setKeyboardId(selection ?? features[0]?.id ?? null); }}
           onBlur={() => setKeyboardId(null)}
         />
         {features.map((feature) => (
@@ -401,7 +459,7 @@ function FeatureMapInner({
             className={styles.nodeButton} type="button" tabIndex={-1}
             aria-label={`Select ${feature.label}, ${feature.cluster}${clamps[feature.id] ? `, clamped ${clamps[feature.id] > 0 ? "+" : ""}${clamps[feature.id]}` : ""}`}
             aria-pressed={selection === feature.id}
-            aria-describedby={hoveredId === feature.id ? tooltipId : undefined}
+            aria-describedby={keyboardId === feature.id ? tooltipId : undefined}
             onClick={() => select(feature.id)} onFocus={() => setKeyboardId(feature.id)} onBlur={() => setKeyboardId(null)} />
         ))}
         <p id={instructionsId} className={styles.srOnly}>Arrow keys explore · Enter selects · Drag to rotate</p>
@@ -416,6 +474,14 @@ function FeatureMapInner({
         ) : null}
         <span className={styles.srOnly} role="status">{selection ? `Selected ${features.find((feature) => feature.id === selection)?.label ?? selection}` : "No feature selected"}</span>
         {flags.length ? <p className={styles.flagNotice} role="status"><span aria-hidden="true">⚠</span> {flags.at(-1)?.signature} · token {(flags.at(-1)?.tokenIndex ?? 0) + 1}</p> : null}
+        {has3d ? (
+          <button type="button" className={styles.zoomButton} aria-pressed={brainZoomed}
+            aria-label={brainZoomed ? "Zoom out to the whole fish" : "Zoom in on the brain"}
+            title={brainZoomed ? "Zoom out to the whole fish" : "Zoom in on the brain"}
+            onClick={() => setBrainZoomed((zoomed) => !zoomed)}>
+            {brainZoomed ? <ZoomOut aria-hidden /> : <ZoomIn aria-hidden />}
+          </button>
+        ) : null}
         <Legend />
       </div>
     </DeepViewport>
