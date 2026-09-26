@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Darumadrop_One, JetBrains_Mono, Sen } from "next/font/google";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 const display = Darumadrop_One({
@@ -32,7 +31,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
+        {children}
       </body>
     </html>
   );
