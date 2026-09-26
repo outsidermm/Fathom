@@ -10,6 +10,12 @@ from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
+# "gemma-2b" is kept as a valid wire value even though ws_stream in main.py
+# rejects it ("Only qwen2.5-7b is connected"): the model-select control in
+# apps/web/src/components/observatory/top-bar.tsx lists it as a disabled
+# "Gemma 2B (unavailable)" option, so the type must still accept it as a
+# value the UI can hold in state, even though it's unreachable via the
+# disabled <SelectItem> and the client never actually sends it.
 Model = Literal["gemma-2b", "qwen2.5-7b"]
 Signature = Literal["hedging", "refusal", "unsupported"]
 StreamState = Literal["idle", "streaming", "inspecting", "done", "error"]
@@ -72,6 +78,11 @@ class ActivationEvent(BaseModel):
     feature_id: str
     value: float = Field(ge=0.0, le=1.0)
     coords: Coords
+    # Not emitted by the current backend (see the "Planned only" note on this
+    # event in docs/api-contract.md), but declared here to match
+    # apps/web/src/lib/contract.ts and the fields feature-inspector.tsx /
+    # diagnostics-feed.tsx already read off "activation" events.
+    explanation: Optional[str] = None
 
 
 class FlagEvent(BaseModel):

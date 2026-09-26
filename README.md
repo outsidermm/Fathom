@@ -84,9 +84,10 @@ from the repository root using **Services (Beta)**:
 - Frontend: `https://<project>.vercel.app/` (fill in once deployed)
 - API: `/api/health`, `/api/features`, and `/ws/stream` on the same domain
 
-Set `QWEN_API_BASE`, `QWEN_API_KEY`, `QWEN_MODEL`, and `CORS_ORIGINS` in the
-project's environment settings. James must supply a Qwen HTTPS URL
-reachable from Vercel. Explicitly set `NEXT_PUBLIC_API_BASE` to an empty string
+Set `QWEN_API_BASE`, `QWEN_API_KEY`, `QWEN_MODEL`, `CORS_ORIGINS`, `AV_API_BASE`,
+and `AV_API_KEY` in the project's environment settings. James must supply a Qwen
+HTTPS URL reachable from Vercel, plus the Runpod AV sidecar's public URL (see
+[the inference runbook](docs/runpod-inference.md)). Explicitly set `NEXT_PUBLIC_API_BASE` to an empty string
 and `NEXT_PUBLIC_WS_URL=/ws/stream`, then rebuild. Unset values still fall
 back to localhost for local development. `CORS_ORIGINS` controls HTTP CORS
 only; the current WebSocket accepts any origin and has no authentication.

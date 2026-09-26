@@ -73,8 +73,16 @@ no internal service binding is needed for this client flow.
    | `QWEN_API_KEY` | Bearer secret for that endpoint, if required |
    | `QWEN_MODEL` | `qwen2.5-7b` (code default) |
    | `CORS_ORIGINS` | Exact allowed HTTP origins when cross-origin access is needed, comma-separated without spaces or trailing slash |
+   | `AV_API_BASE` | The Runpod AV sidecar's reachable HTTPS URL (see [runpod-inference.md](runpod-inference.md)); code default `http://127.0.0.1:30003` is loopback-only and must be overridden for hosted use |
+   | `AV_API_KEY` | Bearer secret for the AV sidecar, if required |
    | `NEXT_PUBLIC_API_BASE` | **Empty string**, explicitly set |
    | `NEXT_PUBLIC_WS_URL` | `/ws/stream` |
+
+   `AV_HOLD_TIMEOUT` (default `4.0` seconds) and `AV_CONCURRENCY` (default `3`)
+   are optional tuning knobs read by `qwen_stream.py`; see
+   [api-contract.md](api-contract.md) for their behavior. `NEXT_PUBLIC_STEERING_ENABLED`
+   (default `false`) is a frontend-only flag; leave it `false` until a backend
+   accepts `clamp`/`reset_clamps`.
 
    For the Vercel UI, enter an actual empty value for `NEXT_PUBLIC_API_BASE`,
    not literal quote characters. In a dotenv file the equivalent is:

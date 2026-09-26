@@ -73,47 +73,71 @@ async def ws_stream(websocket: WebSocket) -> None:
     try:
         await send(StatusEvent(state="idle").model_dump(exclude_none=True))
         while True:
-            raw = await websocket.receive_json()
-            msg_type = raw.get("type")
-
-            if msg_type == "start":
-                try:
-                    msg = StartMessage.model_validate(raw)
-                except ValidationError as exc:
-                    await send(
-                        StatusEvent(state="error", message=str(exc)).model_dump(exclude_none=True)
-                    )
-                    continue
-                await cancel_run()
-                if msg.model != "qwen2.5-7b":
-                    await send(
-                        StatusEvent(state="error", message="Only qwen2.5-7b is connected").model_dump()
-                    )
-                    continue
-                run_task = asyncio.create_task(run_qwen_stream(msg.prompt, send, pace=msg.pace))
-
-            elif msg_type == "clamp":
-                ClampMessage.model_validate(raw)
-                await send(
-                    StatusEvent(state="error", message="Activation steering is not connected yet").model_dump()
-                )
-
-            elif msg_type == "reset_clamps":
-                ResetClampsMessage.model_validate(raw)
-                await send(
-                    StatusEvent(state="error", message="Activation steering is not connected yet").model_dump()
-                )
-
-            elif msg_type == "stop":
-                StopMessage.model_validate(raw)
-                await cancel_run()
-                await send(StatusEvent(state="idle").model_dump())
-
-            else:
+            # A malformed frame (non-JSON text, or JSON that isn't an object)
+            # must not crash the connection — report it and keep listening.
+            try:
+                raw = await websocket.receive_json()
+            except WebSocketDisconnect:
+                raise
+            except Exception:
                 await send(
                     StatusEvent(
-                        state="error", message=f"unknown message type: {msg_type}"
+                        state="error", message="malformed message: expected JSON"
                     ).model_dump(exclude_none=True)
+                )
+                continue
+
+            if not isinstance(raw, dict):
+                await send(
+                    StatusEvent(
+                        state="error", message="malformed message: expected a JSON object"
+                    ).model_dump(exclude_none=True)
+                )
+                continue
+
+            msg_type = raw.get("type")
+
+            try:
+                if msg_type == "start":
+                    msg = StartMessage.model_validate(raw)
+                    await cancel_run()
+                    if msg.model != "qwen2.5-7b":
+                        await send(
+                            StatusEvent(state="error", message="Only qwen2.5-7b is connected").model_dump()
+                        )
+                        continue
+                    run_task = asyncio.create_task(run_qwen_stream(msg.prompt, send, pace=msg.pace))
+
+                elif msg_type == "clamp":
+                    ClampMessage.model_validate(raw)
+                    await send(
+                        StatusEvent(state="error", message="Activation steering is not connected yet").model_dump()
+                    )
+
+                elif msg_type == "reset_clamps":
+                    ResetClampsMessage.model_validate(raw)
+                    await send(
+                        StatusEvent(state="error", message="Activation steering is not connected yet").model_dump()
+                    )
+
+                elif msg_type == "stop":
+                    StopMessage.model_validate(raw)
+                    await cancel_run()
+                    await send(StatusEvent(state="idle").model_dump())
+
+                else:
+                    await send(
+                        StatusEvent(
+                            state="error", message=f"unknown message type: {msg_type}"
+                        ).model_dump(exclude_none=True)
+                    )
+            except ValidationError as exc:
+                # Any message type can fail schema validation (e.g. a "clamp"
+                # with a value outside -1..1, or a missing required field) —
+                # this used to only be caught for "start", crashing the socket
+                # for every other message type.
+                await send(
+                    StatusEvent(state="error", message=str(exc)).model_dump(exclude_none=True)
                 )
     except WebSocketDisconnect:
         await cancel_run()

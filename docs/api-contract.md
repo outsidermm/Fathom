@@ -72,7 +72,8 @@ clamps.
   "token_index": 0,
   "feature_id": "feat_4821",
   "value": 0.73,          // 0..1 firing strength
-  "coords": { "x": 12.4, "y": -3.1, "z": 0.8 } // precomputed 3D layout position; all axes required
+  "coords": { "x": 12.4, "y": -3.1, "z": 0.8 }, // precomputed 3D layout position; all axes required
+  "explanation": "..."    // optional; already rendered by feature-inspector.tsx / diagnostics-feed.tsx
 }
 
 // Planned only: not emitted by the current backend.

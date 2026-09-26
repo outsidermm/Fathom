@@ -3,6 +3,10 @@
  * Keep all three in sync when the contract changes.
  */
 
+// "gemma-2b" stays a valid value even though the backend rejects it ("Only
+// qwen2.5-7b is connected" in apps/api/app/main.py): top-bar.tsx's model
+// select shows it as a disabled "Gemma 2B (unavailable)" option, so state
+// needs to be able to hold it even though the UI never lets it be sent.
 export type Model = "gemma-2b" | "qwen2.5-7b";
 export type Signature = "hedging" | "refusal" | "unsupported";
 export type StreamState = "idle" | "streaming" | "inspecting" | "done" | "error";
