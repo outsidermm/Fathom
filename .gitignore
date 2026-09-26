@@ -16,3 +16,4 @@ apps/web/.env*.local
 # editors
 .vscode/
 .idea/
+.vercel
