@@ -81,9 +81,7 @@ no internal service binding is needed for this client flow.
 
    `AV_HOLD_TIMEOUT` (default `4.0` seconds) and `AV_CONCURRENCY` (default `3`)
    are optional tuning knobs read by `qwen_stream.py`; see
-   [api-contract.md](api-contract.md) for their behavior. `NEXT_PUBLIC_STEERING_ENABLED`
-   (default `false`) is a frontend-only flag; leave it `false` until a backend
-   accepts `clamp`/`reset_clamps`.
+   [api-contract.md](api-contract.md) for their behavior.
 
    For the Vercel UI, enter an actual empty value for `NEXT_PUBLIC_API_BASE`,
    not literal quote characters. In a dotenv file the equivalent is:
