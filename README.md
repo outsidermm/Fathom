@@ -1,161 +1,145 @@
-# Interpretability Observatory — HackGT 13, Oracle of the Deep
+<p align="center"><img src="apps/web/public/brand/fathom-mark.svg" alt="Fathom anglerfish mark" width="88"></p>
 
-Watch Qwen2.5-7B answer while seeing summaries of its internal activations,
-and steer it mid-answer. Answers stream live from SGLang. Before each section,
-the browser shows an interpretation of Qwen's replayed layer-20 state from a
-Natural Language Autoencoder (NLA) activation verbalizer. Qwen also suggests
-2-3 other directions it could take. Click one, or type your own, and the answer
-branches from that point. The kept text stays, and a block-20 contrastive
-activation steer, anchored with the new section's opening, redirects what
-follows. Branches can be steered again.
+# Fathom
 
-```
-browser (Next.js) ──ws──▶ FastAPI (apps/api)
-                              ├─▶ SGLang :30001   Qwen2.5-7B answer + helper calls
-                              └─▶ sidecar :30003  HF Qwen: replay, /contrast, /steer, /score
-                                     └─▶ SGLang :30002  NLA activation verbalizer (AV)
-```
+**See where an answer is heading. Change its course while it unfolds.**
 
-The 3D fish-brain feature map is ready for activation events (`?features=test`
-shows it with a test layout). The backend does not emit those events yet, and
-`/api/features` serves placeholder data.
+Fathom is a steerable AI demo built for HackGT 13. Ask Qwen2.5-7B-Instruct a
+question and watch its answer stream. At section checkpoints, Fathom shows a
+short, plain-language interpretation of a replayed model activation. Choose a
+suggested direction or write your own; the answer branches at that checkpoint,
+keeps what was already written, and continues on the new path.
 
-## Results
+[Try the live demo](https://fathom-ai-space.vercel.app/) · [Run locally](#run-locally) · [Read the benchmark](docs/benchmarks/steer-tokens.md)
 
-In a live 43-case benchmark across 20 prompts, the steered branch reached its
-requested direction and ended within its token cap in 21 cases; an identical
-branch with the same anchored opening but no activation steer did so in 19.
-Re-prompting from the start succeeded in 22. Among the 16 cases where both
-steering and re-prompting succeeded, steering used a median 46% fewer generated
-tokens. The anchor-only branch saved a similar 47% on its 15 paired successes;
-steering used 3% more tokens than anchor-only on their 19 paired successes.
-These results support keeping the answer prefix at a checkpoint, but do not
-establish a separate token-saving benefit from the activation vector.
+> **What a reading means:** It is an interpretation of one activation state,
+> not a transcript of the model's thoughts. Suggested directions come from
+> Qwen, and the post-steer score measures activation alignment, not whether the
+> answer is correct.
 
-This small, model-judged benchmark has multiple cases per prompt, asymmetric
-answer scoring, and many generations that hit the token cap. The steered timing
-also includes its AV readings and AR score, so the timing columns do not
-compare like-for-like latency. See the
-[full method, cases, and example outputs](docs/benchmarks/steer-tokens.md).
+## Use it
 
-## Team
+1. Enter a question and start the answer. Numbered how-to prompts make the
+   section checkpoints easy to see.
+2. Open a focus bubble beside a section. It shows the current reading and
+   alternative directions suggested by Qwen.
+3. Pick a direction or type one, such as “focus on growing vegetables in
+   balcony containers.” Fathom preserves the earlier text and streams a new
+   branch. You can steer a branch again or revisit an earlier one.
 
-| Person | Owns |
-|---|---|
-| Kareem + James | NLA vs. SAE decision, activation hooks, model integration, FastAPI/websocket backend |
-| Samuel + Hari | Next.js/shadcn frontend, live feature-map visualization |
+The live site needs the Runpod model services to be running for generation; the
+interface can load while inference is unavailable.
 
-See `AGENTS.md` for frontend AI-assistant guidelines, `docs/api-contract.md`
-for the interface both sides build against, and
-[`docs/deployment.md`](docs/deployment.md) for the hosted Vercel/Runpod
-setup so the whole team (not just whoever has a tunnel open) can hit a live
-URL. Design: see [docs/design-system.md](docs/design-system.md).
+## How it works
 
-Repository owner and deployment documentation: [outsidermm](https://github.com/outsidermm).
-The NLA models and inference client are upstream work by
-[Kit Fraser-Taliente and coauthors](https://transformer-circuits.pub/2026/nla/index.html).
-
-## Repo layout
-
-```
-apps/web/    Next.js + TypeScript + shadcn/ui frontend
-apps/api/    FastAPI backend — live Qwen text + AV checkpoints; feature-map events pending
-docs/        API contract, Runpod runbook, deployment guide, orchestration design
-vercel.json  Vercel Services — web + API on one domain, API duration 300s
+```text
+Browser (Next.js) ── WebSocket ──▶ FastAPI orchestrator
+                                  ├──▶ SGLang / Qwen2.5-7B: streamed answer and helper calls
+                                  └──▶ replay sidecar / HF Qwen: block-20 reads and steered branches
+                                        ├──▶ NLA activation verbalizer (AV): activation → description
+                                        └──▶ NLA activation reconstructor (AR): description → scoring vector
 ```
 
-## Cloud checks and deployment
+1. **Find a checkpoint.** Deterministic checks recognize numbered steps,
+   Markdown headings, and section leads as the answer arrives. The display is
+   paced so a reading can appear beside its section.
+2. **Read an activation.** The sidecar replays the prompt and generated prefix
+   through Qwen, then samples the residual stream after decoder block 20 at
+   the last content token of the section opening. The upstream NLA AV describes
+   that state; Qwen condenses the description into the focus label shown in the
+   interface.
+3. **Branch the answer.** For a chosen direction, Qwen names a new section
+   opening. The sidecar contrasts the block-20 states produced by the new and
+   original openings and applies that difference during the new opening. The
+   target opening also anchors the branch as text. Earlier text is retained,
+   and later branches inherit prior interventions.
+4. **Measure the shift.** The NLA AR reconstructs vectors from descriptions
+   and scores their centered cosine similarity to the replayed states before
+   and after the branch. This is feedback about the intervention's activation
+   alignment, not an answer-quality grade.
 
-GitHub Actions runs Ruff and the API unit tests on Python 3.12, plus frontend
-lint, tests, and a type-checked production build on Node 24. The workflow runs
-for pull requests to `main`, pushes to `main`, and manual dispatches. To keep
-production changes behind these checks, require both `API / Ruff and tests`
-and `Web / lint, tests, build` in the GitHub `main` branch rules.
+SGLang serves the main answer, while the Hugging Face Qwen sidecar provides the
+forward hooks needed for replay and intervention. See the
+[orchestration design](docs/orchestration.md) and
+[current WebSocket contract](docs/api-contract.md) for implementation details.
 
-The connected Vercel project creates a Preview deployment for branch pushes
-and deploys `main` to production after merge.
-GitHub Actions and Vercel run independently; the branch rule is what prevents
-merging a failing PR. See
-[`docs/deployment.md`](docs/deployment.md) for the Runpod URL and Vercel
-environment variables needed for live Qwen streaming.
+## What we measured
 
-## Quick start
+In a live benchmark of **43 checkpoint cases from 20 prompts**, branches that
+succeeded alongside a full re-prompt used a median **46% fewer generated
+tokens** (16 paired cases). An anchor-only branch, with the same preserved
+prefix and target opening but no activation steer, saved a similar amount. The
+measured token saving is therefore evidence for **checkpoint branching**, not
+an isolated benefit from the activation vector.
 
-**Backend** (current WebSocket with live Qwen text and optional AV checkpoints):
+This is a small, model-judged experiment with multiple checkpoints per prompt,
+unequal scoring of branches and re-prompts, and many generations that hit their
+token cap. It does not provide a like-for-like latency or total inference-cost
+comparison. The [full report](docs/benchmarks/steer-tokens.md) includes the
+four arms, method, individual cases, and limitations.
+
+## Run locally
+
+You need Python 3.12, Node.js 24, and reachable Qwen and AV/steering sidecar
+endpoints. The model setup, persistent Runpod volume, and startup commands are
+in the [inference runbook](docs/runpod-inference.md). The API health route works
+without the models, but prompting requires them.
+
+From the repository root, copy the example configuration and set the backend
+URLs and keys for your model services:
+
+```bash
+cp .env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
+```
+
+Start the API:
 
 ```bash
 cd apps/api
-python3 -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Health check: `curl localhost:8000/api/health`
-This command runs the API locally. To get real Qwen output, start the A100
-model server and SSH tunnel described in [the inference runbook](docs/runpod-inference.md).
-Without them the WebSocket reports that Qwen is unavailable. The current
-[API contract](docs/api-contract.md) covers the WebSocket; the
-[conversation harness design](docs/target-harness-contract.md) is a possible
-future direction. For the planned path from live generation to explanation
-and task steering, see
-[the orchestration design](docs/orchestration.md).
-
-**Frontend**:
+In another terminal, start the web app:
 
 ```bash
 cd apps/web
-npm install
-cp .env.example .env.local   # or copy the NEXT_PUBLIC_* vars from the root .env.example
+npm ci
 npm run dev
 ```
 
-Open http://localhost:3000, type a prompt, and press run. With the A100 and
-SSH tunnel active, the answer streams from Qwen with live AV readings,
-alternatives, and steerable branches. The 3D activation map still uses
-placeholder data.
+Open [localhost:3000](http://localhost:3000). Check the API with
+`curl http://localhost:8000/api/health`. Local defaults use `127.0.0.1:30001`
+for Qwen and `127.0.0.1:30003` for the sidecar; configure reachable endpoints
+or follow the runbook's SSH tunnel instructions before sending a prompt. For
+hosting on Vercel and Runpod, see the [deployment guide](docs/deployment.md).
 
-## Deployed
+## Current scope
 
-Follow [`docs/deployment.md`](docs/deployment.md) to create one Vercel project
-from the repository root using **Services (Beta)**:
+The answer stream, AV readings, suggested and typed directions, repeated
+branching, and AR scores are connected. Conversation runs live in a WebSocket
+session and are not persisted. The 3D fish-brain map is a visual prototype:
+`?features=test` shows fixture data, while `/api/features` still returns
+placeholders rather than live model features.
 
-- Frontend: `https://<project>.vercel.app/` (fill in once deployed)
-- API: `/api/health`, `/api/features`, and `/ws/stream` on the same domain
+Next steps are capturing activations during generation to avoid replay,
+testing heading-only and activation-only interventions under matched
+conditions, and feeding real feature events into the map.
 
-Set `QWEN_API_BASE`, `QWEN_API_KEY`, `QWEN_MODEL`, `CORS_ORIGINS`, `AV_API_BASE`,
-and `AV_API_KEY` in the project's environment settings. James must supply a Qwen
-HTTPS URL reachable from Vercel, plus the Runpod AV sidecar's public URL (see
-[the inference runbook](docs/runpod-inference.md)). Explicitly set `NEXT_PUBLIC_API_BASE` to an empty string
-and `NEXT_PUBLIC_WS_URL=/ws/stream`, then rebuild. Unset values still fall
-back to localhost for local development. `CORS_ORIGINS` controls HTTP CORS
-only; the current WebSocket accepts any origin and has no authentication or
-application-level generation rate limit. `AV_CONCURRENCY` is per run, not a
-service-wide limit; decide public-demo admission controls before promotion.
+## Repository and credits
 
-Services uses Fluid Compute by default; the API has a 300-second connection
-limit. Long generations or idle tabs can hit that limit; the current frontend
-reconnects automatically with backoff. Interrupted runs are not resumed; press
-Run or Rerun after reconnection to start again. See the deployment guide for plan
-limits and validation steps. Deployment requires a Vercel account with repo access
-and Services Beta availability; the guide documents the two-project fallback.
+| Path | Purpose |
+|---|---|
+| `apps/web/` | Next.js, React, and Zustand interface |
+| `apps/api/` | FastAPI orchestration, checkpoints, sidecar, and evaluations |
+| `docs/api-contract.md` | Current browser/backend protocol |
+| `docs/runpod-inference.md` | Model setup and operations |
+| `docs/benchmarks/steer-tokens.md` | Live steering comparison |
 
-## Status
-
-- [x] Repo scaffolded; frontend production build/typecheck/lint and API tests pass
-- [x] Current WebSocket with a tested live Qwen text bridge and replayed AV checkpoints
-- [x] Show AV readings, alternatives, and steered branches in the frontend
-- [x] Vercel configuration and guide for frontend + API (`docs/deployment.md`)
-- [ ] Validate hosted Qwen streaming and WebSocket duration/reconnect behavior
-- [x] Runpod public proxy setup and authenticated service launch scripts documented
-      (`docs/runpod-inference.md`); verify current Pod reachability before the demo
-- [x] Steering (`steer` → `branch`) in the current WebSocket contract
-- [ ] Real activation events for the feature map
-- [x] Download Qwen2.5-7B-Instruct, NLA AV, and NLA AR checkpoints to the
-      Runpod Global volume; verify one AV random-vector smoke test
-- [x] Replay real Qwen layer-20 activations for experimental AV readings (runbook)
-- [ ] Original-generation activation capture and AR reconstruction validation
-- [ ] Real activation hooks replacing placeholder `/api/features` data
-- [x] 3D fish-brain feature map for planned activation events, with keyboard selection
-- [ ] Failure-signature flagging (hedging/refusal/unsupported) tuned against
-      the real model instead of the mock's keyword heuristic
-- [ ] Demo framing + video
+The [Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
+model is from Qwen. Fathom integrates the upstream NLA AV/AR checkpoints and
+inference client from
+[Kit Fraser-Taliente and coauthors](https://transformer-circuits.pub/2026/nla/index.html).
