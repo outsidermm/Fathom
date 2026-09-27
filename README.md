@@ -139,10 +139,7 @@ conditions, and feeding real feature events into the map.
 | `docs/runpod-inference.md` | Model setup and operations |
 | `docs/benchmarks/steer-tokens.md` | Live steering comparison |
 
-Kareem and James worked on the model integration and backend; Samuel and Hari
-worked on the frontend and visualization. Repository ownership and deployment
-documentation: [outsidermm](https://github.com/outsidermm). The
-[Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) model is
-from Qwen. The NLA AV/AR checkpoints and inference client are upstream work by
-[Kit Fraser-Taliente and coauthors](https://transformer-circuits.pub/2026/nla/index.html);
-Fathom integrates them for this interactive demo.
+The [Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
+model is from Qwen. Fathom integrates the upstream NLA AV/AR checkpoints and
+inference client from
+[Kit Fraser-Taliente and coauthors](https://transformer-circuits.pub/2026/nla/index.html).
